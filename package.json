@@ -1,0 +1,7 @@
+{
+  "name": "xingtu-route-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "基于高德地图 JS API 的国内路线规划网页",
+  "scripts": { "start": "node server.cjs", "build": "node build-site.cjs", "check": "node --check app.js && node --check server.cjs && node --check config.js && node --check route-optimizer.js && node --check worker.mjs", "pretest": "node build-site.cjs", "test": "node --test tests/optimizer.test.cjs tests/planning-ui.test.cjs tests/worker.test.mjs" }
+}
