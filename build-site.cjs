@@ -3,7 +3,7 @@ const path = require('node:path');
 const root = __dirname;
 const output = path.join(root, 'dist', 'server');
 fs.mkdirSync(output, { recursive: true });
-const files = { 'index.html': 'text/html', 'styles.css': 'text/css', 'app.js': 'text/javascript', 'route-optimizer.js': 'text/javascript', 'config.js': 'text/javascript' };
+const files = { 'index.html': 'text/html', 'styles.css': 'text/css', 'app.js': 'text/javascript', 'i18n.js': 'text/javascript', 'route-optimizer.js': 'text/javascript', 'config.js': 'text/javascript' };
 const assets = {};
 for (const [name, type] of Object.entries(files)) {
   let content = fs.readFileSync(path.join(root, name), 'utf8');

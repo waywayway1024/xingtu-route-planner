@@ -34,3 +34,6 @@ html[data-theme=dark] .amap-scalecontrol{color:#e1ece5}
 @media(any-hover:hover){.map-area,#map,#map *{cursor:var(--xingtu-cursor),auto!important}#map input,#map textarea,#map [contenteditable=true]{cursor:text!important}}
 .stop-field{padding:12px;border:1px solid var(--border);border-radius:10px;background:#f8faf8;transition:opacity .15s,border-color .15s}.stop-field label{padding-right:72px}.stop-field .remove-stop{top:46px;right:18px}.stop-drag{position:absolute;right:10px;top:6px;border:0;background:transparent;color:var(--green);font-size:12px;padding:6px 8px;cursor:grab!important;user-select:none}.stop-drag:active{cursor:grabbing!important}.stop-drag:disabled{cursor:default!important;opacity:.4}.stop-field.dragging{opacity:.45}.stop-field.drop-before{border-top:3px solid var(--green);box-shadow:0 -3px 0 #176b5320}.stop-field.drop-after{border-bottom:3px solid var(--green);box-shadow:0 3px 0 #176b5320}html[data-theme=dark] .stop-field{background:#1d2f26}
 .stop-drag{touch-action:none}
+.header{gap:16px}.header-actions .button{white-space:nowrap}
+@media(max-width:600px){.header{height:auto;min-height:68px;padding-top:12px;padding-bottom:12px;flex-wrap:wrap}.header-actions{margin-left:auto}.brand small{display:none}}
+@media(max-width:360px){.header-actions{width:100%;justify-content:flex-end}}

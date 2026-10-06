@@ -30,6 +30,10 @@ test('proxy forwards to the fixed provider and replaces caller-supplied credenti
 });
 test('hosted build uses runtime configuration and does not publish local deployment files', async () => {
   assert.match(await (await worker.fetch(new Request(base), env)).text(), /site-config.js/);
+  assert.match(await (await worker.fetch(new Request(base), env)).text(), /i18n.js/);
+  const languageAsset = await worker.fetch(new Request(base + '/i18n.js'), env);
+  assert.equal(languageAsset.status, 200);
+  assert.match(await languageAsset.text(), /window.I18n/);
   assert.equal((await worker.fetch(new Request(base + '/deployment-secrets.local.json'), env)).status, 404);
   assert.equal((await worker.fetch(new Request(base + '/README.md'), env)).status, 404);
 });

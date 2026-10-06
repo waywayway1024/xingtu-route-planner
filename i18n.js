@@ -1,0 +1,201 @@
+'use strict';
+window.I18n = (() => {
+  const english = {
+  "行途": "Xingtu",
+  "让每次出发都有方向": "Find your way on every journey",
+  "地图设置": "Map settings",
+  "下一站，去哪里？": "Where to next?",
+  "从熟悉的街道，到想去的远方。": "From familiar streets to new destinations.",
+  "搜索城市": "Search city",
+  "用于缩小地点搜索范围": "Narrow down place searches",
+  "例如：上海": "e.g. Shanghai",
+  "起点": "Start",
+  "终点": "Destination",
+  "输入地址或地点名称": "Enter an address or place",
+  "交换起点和终点": "Swap start and destination",
+  "你想去哪里？": "Where do you want to go?",
+  "＋ 添加地址": "+ Add stop",
+  "批量输入": "Batch entry",
+  "最后一站": "Final stop",
+  "固定终点，自动安排中间地址": "Keep destination, optimize intermediate stops",
+  "最后一站不限，全部地址自动排序": "Any final stop, optimize all stops",
+  "优化目标": "Optimize for",
+  "总驾车耗时更少": "Less driving time",
+  "总驾车距离更短": "Shorter driving distance",
+  "最多 8 个地址（含起点）。多地址优化仅支持驾车，按实际道路查询比较访问顺序。": "Up to 8 addresses including the start. Multi-stop optimization supports driving and compares routes along actual roads.",
+  "◎ 使用我的位置作为起点": "◎ Use my location as the start",
+  "出行方式": "Travel mode",
+  "驾车": "Driving",
+  "公交": "Transit",
+  "步行": "Walking",
+  "骑行": "Cycling",
+  "驾车偏好": "Driving preference",
+  "速度优先": "Fastest",
+  "费用优先": "Lowest cost",
+  "距离优先": "Shortest",
+  "躲避拥堵": "Avoid traffic",
+  "规划路线": "Plan route",
+  "配置地图后，即可开始规划。": "Connect the map to start planning.",
+  "路线计算进度": "Route planning progress",
+  "正在计算路线": "Calculating route",
+  "取消计算": "Cancel",
+  "地址较多时需要几十秒，请稍候。": "Several addresses may take tens of seconds. Please wait.",
+  "推荐方案": "Recommended route",
+  "推荐访问顺序": "Recommended visit order",
+  "将顺序填回地址栏": "Apply this order",
+  "复制行程": "Copy itinerary",
+  "路线详细信息": "Route details",
+  "路线与预计耗时由高德地图提供": "Routes and time estimates are provided by AMap.",
+  "实际出行请以现场道路情况为准": "Follow actual road conditions when traveling.",
+  "地图": "Map",
+  "每一段旅程，从这里开始": "Your journey starts here",
+  "连接高德地图，查看你的路线。": "Connect AMap to see your route.",
+  "配置高德地图": "Connect AMap",
+  "支持中国国内路线规划": "Route planning within China",
+  "路线规划": "Route planning",
+  "批量输入地址": "Enter addresses in bulk",
+  "关闭": "Close",
+  "每行一个地址，共 2–8 个。第一行为起点，最后一行为终点；导入后，请逐个选择候选地点确认位置。": "Enter 2–8 addresses, one per line. The first is the start and the last is the destination. After importing, select a suggested place for each address to confirm its location.",
+  "地址列表": "Address list",
+  "北京南站\n天坛公园\n颐和园": "北京南站\n天坛公园\n颐和园",
+  "将替换当前地址列表，现有路线也会清除。": "This replaces the current address list and clears the route.",
+  "导入并确认地址": "Import addresses",
+  "连接高德地图": "Connect AMap",
+  "在高德开放平台创建「Web 端（JS API）」Key。配置仅保存在当前浏览器会话中。": "Create a Web (JS API) key on the AMap Open Platform. Settings are stored only for this browser session.",
+  "高德 JS API Key": "AMap JS API key",
+  "填入你的 Key": "Enter your key",
+  "安全密钥 securityJsCode": "Security code (securityJsCode)",
+  "本地开发使用": "For local development",
+  "安全代理地址（可选）": "Security proxy URL (optional)",
+  "https://你的域名/_AMapService": "https://your-domain/_AMapService",
+  "本地体验填安全密钥；正式部署建议使用安全代理。代理地址和安全密钥至少填写一项。": "Use a security code locally. A security proxy is recommended for deployment. Provide at least one of these.",
+  "前往高德开放平台申请 ↗": "Get a key on AMap Open Platform ↗",
+  "保存并连接": "Save and connect",
+  " 已确认": " confirmed",
+  "✓ 已确认 · ": "✓ Confirmed · ",
+  "请选择候选地点确认位置": "Select a suggestion to confirm the location",
+  "等待输入地址": "Waiting for an address",
+  "途经地址 ": "Stop ",
+  "拖动途经地址 ": "Drag stop ",
+  " 调整顺序，也可使用上下方向键": " to reorder, or use the up/down arrow keys",
+  "☀ 日间模式": "☀ Light mode",
+  "☾ 黑夜模式": "☾ Dark mode",
+  "请填写安全密钥或安全代理地址。": "Enter a security code or security proxy URL.",
+  "浏览器禁止会话存储，请改为编辑 config.js 后刷新页面。": "Session storage is unavailable. Edit config.js and reload the page.",
+  "正在连接高德地图…": "Connecting to AMap…",
+  "正在加载地图…": "Loading map…",
+  "地图加载超时，请检查网络后刷新。": "Map loading timed out. Check your connection and reload.",
+  "地图加载失败，请核对 Key 和安全配置。": "Map loading failed. Check the key and security settings.",
+  "无法连接高德地图，请检查网络。": "Cannot connect to AMap. Check your connection.",
+  "地图已连接。输入地址后，请从候选地点中选择。": "Map connected. Enter an address and select a suggested place.",
+  "已选择地址：": "Selected address: ",
+  "没有找到该地点，请补充城市或更详细的地址。": "Place not found. Add a city or a more detailed address.",
+  "地点查询失败，请检查 Key 权限、额度和网络。": "Place search failed. Check API permissions, quota and your connection.",
+  "地址（参与自动排序）": "Stop (included in optimization)",
+  "途经地址顺序已调整，请重新规划路线。": "Stop order changed. Please plan the route again.",
+  "途经地址": "Stop",
+  "输入需要到访的地址": "Enter an address to visit",
+  "删除此地址": "Remove this stop",
+  "⠿ 拖动": "⠿ Drag",
+  "按住拖动调整顺序；键盘可使用上下方向键": "Drag to reorder, or use the up/down arrow keys",
+  "请输入 2–8 个地址，每行一个；空行会自动忽略。": "Enter 2–8 addresses, one per line. Blank lines are ignored.",
+  "已导入 ": "Imported ",
+  " 个地址。点击各地址并选择候选地点，确认后再规划。": " addresses. Select a suggested place for each address, then plan the route.",
+  "正在取消计算…": "Cancelling…",
+  "已取消，将在当前查询结束后停止。": "Cancelled. Planning will stop after the current query finishes.",
+  "推荐顺序已填回地址栏，可调整后重新规划。": "Recommended order applied. You can adjust it and plan again.",
+  "行程已复制，可以粘贴给同行的人。": "Itinerary copied. You can share it with your companions.",
+  "浏览器未允许复制，请选中推荐访问顺序后手动复制。": "Clipboard access was denied. Select the recommended order and copy it manually.",
+  "正在获取你的位置，请允许浏览器定位…": "Getting your location. Allow location access in your browser…",
+  "定位失败，请允许定位权限，或手动输入起点地址。": "Location unavailable. Allow location access or enter the start manually.",
+  "我的位置": "My location",
+  "已将你的位置设为起点。": "Your current location is now the start.",
+  "小时": " hr ",
+  "分钟": " min",
+  "路线查询超时，请检查网络后重试。": "Route query timed out. Check your connection and try again.",
+  "路线查询失败，请检查高德服务权限、额度和网络。": "Route query failed. Check AMap permissions, quota and your connection.",
+  "地址或选项已改变，请重新规划。": "Addresses or options changed. Please plan again.",
+  "正在比较地址间的道路路线 ": "Comparing road routes ",
+  "比较道路路线 ": "Comparing road routes ",
+  "多地址自动排序目前支持驾车，请切换到驾车；其他方式可规划两点路线。": "Multi-stop optimization supports driving. Choose driving, or use other modes for two addresses.",
+  "请从候选地点中确认每一个地址的准确位置。": "Confirm every address by selecting a suggested place.",
+  "公交规划需要填写所在城市。": "Enter a city for transit planning.",
+  "正在计算路线…": "Calculating route…",
+  "这些地址无法组成全部可达的驾车路线，请调整地址。": "No driving route can reach all these addresses. Adjust the addresses.",
+  "访问顺序已优化，正在生成完整路线…": "Stop order optimized. Generating the full route…",
+  "正在生成完整路线…": "Generating full route…",
+  "未找到可用路线，请调整地点或出行方式。": "No route found. Change the places or travel mode.",
+  "查看路线详情": "View route details",
+  " 公里": " km",
+  "起点 · ": "Start · ",
+  "最后一站 · ": "Final stop · ",
+  "原输入顺序存在不可达路段。": "Some segments in the original order are unreachable.",
+  "原输入顺序已达到同等结果。": "The original order gives an equivalent result.",
+  "相比输入顺序，分段估算减少 ": "Estimated segment savings compared with the original order: ",
+  " 秒": " sec",
+  " 米": " m",
+  "。": ".",
+  " 按本次道路查询的分段": " The optimal order uses the queried segment ",
+  "耗时": "travel times",
+  "距离": "distances",
+  "选出最优顺序；完整路线以地图结果为准，实时路况可能变化。": ". Follow the full route on the map; live traffic may change.",
+  "行途 · 推荐行程\n": "Xingtu · Recommended itinerary\n",
+  "（": " (",
+  "）": ")",
+  "\n预计 ": "\nEstimated ",
+  "\n预计耗时仅供参考，请以实际路况为准。": "\nTime estimates are for reference. Follow actual traffic conditions.",
+  "已生成经过全部地址的推荐路线。": "Recommended route through all addresses is ready.",
+  "找到 ": "Found ",
+  " 个方案，可在下方查看路线详情。": " options. View route details below.",
+  "规划失败，请稍后重试。": "Planning failed. Please try again later.",
+  "计算已取消，可以重新规划。": "Planning cancelled. You can start again."
+};
+  let language = 'zh';
+  try { if (localStorage.getItem('xingtu-language') === 'en') language = 'en'; } catch { /* Storage is optional. */ }
+  const textEntries = [];
+  const attributeEntries = [];
+  const listeners = [];
+  function t(text) { return language === 'en' ? (english[text] ?? text) : text; }
+  function capturePage() {
+    if (!document.createTreeWalker) return;
+    const walker = document.createTreeWalker(document.body, 4);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (['SCRIPT', 'STYLE'].includes(node.parentElement?.tagName)) continue;
+      if (node.parentElement?.closest('[data-dynamic]')) continue;
+      if (node.textContent.trim()) textEntries.push({ node, source: node.textContent });
+    }
+    document.querySelectorAll('[placeholder], [aria-label], [title]').forEach((element) => {
+      if (element.parentElement?.closest('[data-dynamic]')) return;
+      for (const attr of ['placeholder', 'aria-label', 'title']) {
+        const value = element.getAttribute(attr);
+        if (value === null) continue;
+        attributeEntries.push({ element, attr, source: value });
+      }
+    });
+  }
+  // Capture the static UI once, before the map SDK creates its own DOM.
+  // Language changes touch only these nodes and app-owned dynamic renderers.
+  function translatePage() {
+    textEntries.forEach(({ node, source }) => { node.textContent = source.replace(source.trim(), t(source.trim())); });
+    attributeEntries.forEach(({ element, attr, source }) => element.setAttribute(attr, t(source)));
+  }
+  function apply() {
+    document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN';
+    document.title = language === 'en' ? 'Xingtu · Route planning' : '行途 · 路线规划';
+    translatePage();
+    const button = document.getElementById('language-toggle');
+    button.textContent = language === 'en' ? '中文' : 'English';
+    button.setAttribute('aria-label', language === 'en' ? 'Switch to Chinese' : '切换为英文');
+  }
+  function setLanguage(next) {
+    if (!['zh', 'en'].includes(next)) return;
+    language = next;
+    try { localStorage.setItem('xingtu-language', language); } catch { /* Switching still works. */ }
+    apply(); listeners.forEach((listener) => listener());
+  }
+  document.getElementById('language-toggle').onclick = () => setLanguage(language === 'en' ? 'zh' : 'en');
+  capturePage();
+  apply();
+  return { t, setLanguage, get language() { return language; }, onChange(listener) { listeners.push(listener); } };
+})();

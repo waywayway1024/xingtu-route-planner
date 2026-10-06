@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // A small DOM adapter exercises the app's actual handlers without calling AMap.
-function fixture() {
+function fixture(savedLanguage = null) {
   const elements = new Map();
   class Element {
     constructor(tag = 'div') { this.tag = tag; this.children = []; this.value = ''; this.hidden = false; this.disabled = false; this.attributes = {}; this.handlers = {}; this.textContent = ''; }
@@ -43,11 +43,64 @@ function fixture() {
   };
   const pending = [];
   let clears = 0;
-  const context = vm.createContext({ document: doc, window: { NAV_CONFIG: {}, RouteOptimizer: require('../route-optimizer.js'), addEventListener() {} }, sessionStorage: { getItem: () => null }, localStorage: {}, navigator: { clipboard: { writeText: async () => {} } }, setTimeout, clearTimeout, requestAnimationFrame: (callback) => setTimeout(callback, 0), cancelAnimationFrame: clearTimeout, AMap: { Driving: class { clear() { clears++; } search(...args) { pending.push(args.at(-1)); } } } });
+  const context = vm.createContext({ document: doc, window: { NAV_CONFIG: {}, RouteOptimizer: require('../route-optimizer.js'), addEventListener() {} }, sessionStorage: { getItem: () => null }, localStorage: { getItem: () => savedLanguage }, navigator: { clipboard: { writeText: async () => {} } }, setTimeout, clearTimeout, requestAnimationFrame: (callback) => setTimeout(callback, 0), cancelAnimationFrame: clearTimeout, AMap: { Driving: class { clear() { clears++; } search(...args) { pending.push(args.at(-1)); } } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../i18n.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
   return { elements, pending, context, run: (code) => vm.runInContext(code, context), clears: () => clears };
 }
 const event = { preventDefault() {} };
+test('language preference restores and switching preserves addresses, order, theme and map', () => {
+  const f = fixture('en');
+  assert.equal(f.elements.get('language-toggle').textContent, '中文');
+  assert.match(f.elements.get('status').textContent, /Connect the map/);
+  const saved = [];
+  f.context.localStorage.setItem = (key, value) => saved.push([key, value]);
+  f.elements.get('batch-addresses').value = '北京南站\n天坛公园\n颐和园\n北京站';
+  f.elements.get('batch-form').onsubmit(event);
+  f.run("selected['stop-1'] = { name: '天坛公园', location: '116,39' }; map = { setMapStyle() { throw new Error('Language must not reload the map'); } }");
+  const version = f.run('routeVersion');
+  f.elements.get('language-toggle').onclick();
+  assert.equal(f.context.document.documentElement.lang, 'zh-CN');
+  assert.equal(f.elements.get('start').value, '北京南站');
+  assert.equal(f.run("selected['stop-1'].location"), '116,39');
+  assert.deepEqual(Array.from(f.run('stops')), ['stop-1', 'stop-2']);
+  assert.equal(f.run('routeVersion'), version);
+  assert.equal(f.context.document.documentElement.dataset.theme, 'light');
+  assert.deepEqual(saved, [['xingtu-language', 'zh']]);
+  f.elements.get('batch-addresses').value = '仅一个地址'; f.elements.get('batch-form').onsubmit(event);
+  f.elements.get('language-toggle').onclick();
+  assert.match(f.elements.get('batch-error').textContent, /Enter 2–8 addresses/);
+  assert.match(f.elements.get('stop-1-field').querySelector('.stop-drag').attributes['aria-label'], /Drag stop 1/);
+});
+
+test('switching during a query preserves it and completed itinerary can switch both ways', async () => {
+  const f = fixture();
+  f.elements.get('batch-addresses').value = '起点\n中途\n终点'; f.elements.get('batch-form').onsubmit(event);
+  f.run("loadedConfig = true; map = {}; addressIds().forEach((id, i) => selected[id] = {name: '地点' + i, address: '详细地址' + i, location: String(i)})");
+  const task = f.elements.get('route-form').onsubmit(event);
+  const version = f.run('routeVersion');
+  f.elements.get('language-toggle').onclick();
+  assert.equal(f.run('routeVersion'), version);
+  assert.match(f.elements.get('progress-label').textContent, /Comparing road routes 1\/2/);
+  for (let i = 0; i < 3; i++) {
+    assert.equal(f.pending.length, 1);
+    f.pending.shift()('complete', { routes: [{ time: 3720, distance: 12345 }] });
+    if (i < 2) await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  await task;
+  assert.equal(f.elements.get('summary').hidden, false);
+  assert.equal(f.elements.get('duration').textContent, '1 hr 2 min');
+  assert.equal(f.elements.get('distance').textContent, '12.3 km');
+  assert.match(f.run('copiedItinerary'), /Xingtu · Recommended itinerary/);
+  assert.match(f.run('copiedItinerary'), /地点0 \(详细地址0\)/);
+  assert.match(f.elements.get('order-list').children[0].textContent, /Start · 地点0/);
+  f.elements.get('language-toggle').onclick();
+  assert.equal(f.elements.get('summary').hidden, false);
+  assert.equal(f.elements.get('duration').textContent, '1小时2分钟');
+  assert.match(f.run('copiedItinerary'), /行途 · 推荐行程/);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.clears(), 0);
+});
 test('theme paints immediately and rapid toggles request only the final map style', async () => {
   const f = fixture(); const updates = [];
   f.context.recordStyle = (style) => updates.push(style);

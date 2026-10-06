@@ -13,12 +13,13 @@
   <link rel="stylesheet" href="styles.css">
   <script src="config.js" defer></script>
   <script src="route-optimizer.js" defer></script>
+  <script src="i18n.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
   <header class="header">
     <a class="brand" href="./"><span class="brand-icon">↗</span><span>行途<small>让每次出发都有方向</small></span></a>
-    <div class="header-actions"><button id="theme-toggle" class="button secondary" type="button" aria-pressed="false">☾ 黑夜模式</button><button id="settings" class="button secondary">地图设置</button></div>
+    <div class="header-actions"><button id="language-toggle" data-dynamic class="button secondary" type="button">English</button><button id="theme-toggle" data-dynamic class="button secondary" type="button" aria-pressed="false">☾ 黑夜模式</button><button id="settings" class="button secondary">地图设置</button></div>
   </header>
   <main class="workspace">
     <aside class="sidebar">
@@ -29,10 +30,10 @@
         <div class="locations">
           <div class="location-field"><label for="start"><span class="dot start-dot"></span>起点</label><input id="start" placeholder="输入地址或地点名称" autocomplete="off" required aria-controls="start-options"><div id="start-options" class="suggestions" hidden></div></div>
           <button id="swap" type="button" class="swap" aria-label="交换起点和终点">⇅</button>
-          <div id="stops"></div>
-          <div class="location-field"><label for="end"><span class="dot end-dot"></span>终点</label><input id="end" placeholder="你想去哪里？" autocomplete="off" required aria-controls="end-options"><div id="end-options" class="suggestions" hidden></div></div>
+          <div id="stops" data-dynamic></div>
+          <div class="location-field"><label for="end" data-dynamic><span class="dot end-dot"></span>终点</label><input id="end" placeholder="你想去哪里？" autocomplete="off" required aria-controls="end-options"><div id="end-options" class="suggestions" hidden></div></div>
         </div>
-        <div class="address-actions"><button id="add-stop" type="button" class="text-button">＋ 添加地址</button><button id="open-batch" type="button" class="text-button">批量输入</button><span id="address-count" class="address-count" aria-live="polite"></span></div>
+        <div class="address-actions"><button id="add-stop" type="button" class="text-button">＋ 添加地址</button><button id="open-batch" type="button" class="text-button">批量输入</button><span id="address-count" data-dynamic class="address-count" aria-live="polite"></span></div>
         <section id="optimization-options" class="optimization-options" hidden>
           <label for="end-mode">最后一站</label><select id="end-mode"><option value="fixed">固定终点，自动安排中间地址</option><option value="free">最后一站不限，全部地址自动排序</option></select>
           <label for="objective">优化目标</label><select id="objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option></select>
@@ -43,20 +44,20 @@
         <div id="policy-field"><label for="policy">驾车偏好</label><select id="policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
         <button id="plan" class="button primary" type="submit">规划路线 <span>→</span></button>
       </form>
-      <p id="status" class="status" role="status" aria-live="polite">配置地图后，即可开始规划。</p>
-      <section id="planning-progress" class="planning-progress" hidden aria-label="路线计算进度"><div><span id="progress-label">正在计算路线</span><button id="cancel-plan" type="button" class="text-button">取消计算</button></div><progress id="progress-bar" max="100"></progress><small>地址较多时需要几十秒，请稍候。</small></section>
-      <section id="summary" class="summary" hidden><span class="eyebrow">推荐方案</span><div><strong id="duration"></strong><span id="distance"></span></div><p id="route-caption"></p></section>
-      <section id="visit-order" class="visit-order" hidden><h2>推荐访问顺序</h2><ol id="order-list"></ol><p id="optimization-note"></p><div class="result-actions"><button id="apply-order" type="button" class="text-button">将顺序填回地址栏</button><button id="copy-order" type="button" class="text-button">复制行程</button></div></section>
-      <div id="route-panel" aria-label="路线详细信息"></div>
+      <p id="status" data-dynamic class="status" role="status" aria-live="polite">配置地图后，即可开始规划。</p>
+      <section id="planning-progress" class="planning-progress" hidden aria-label="路线计算进度"><div><span id="progress-label" data-dynamic>正在计算路线</span><button id="cancel-plan" type="button" class="text-button">取消计算</button></div><progress id="progress-bar" max="100"></progress><small>地址较多时需要几十秒，请稍候。</small></section>
+      <section id="summary" class="summary" hidden><span class="eyebrow">推荐方案</span><div><strong id="duration" data-dynamic></strong><span id="distance" data-dynamic></span></div><p id="route-caption" data-dynamic></p></section>
+      <section id="visit-order" class="visit-order" hidden><h2>推荐访问顺序</h2><ol id="order-list" data-dynamic></ol><p id="optimization-note" data-dynamic></p><div class="result-actions"><button id="apply-order" type="button" class="text-button">将顺序填回地址栏</button><button id="copy-order" type="button" class="text-button">复制行程</button></div></section>
+      <div id="route-panel" data-dynamic aria-label="路线详细信息"></div>
       <footer class="sidebar-footer">路线与预计耗时由高德地图提供<br>实际出行请以现场道路情况为准</footer>
     </aside>
     <section class="map-area" aria-label="地图">
       <div id="map"></div>
-      <div id="map-placeholder" class="map-placeholder"><div class="empty-card"><span class="empty-icon">↗</span><h2>每一段旅程，从这里开始</h2><p id="map-message">连接高德地图，查看你的路线。</p><button id="connect" class="button primary">配置高德地图</button><small>支持中国国内路线规划</small></div></div>
+      <div id="map-placeholder" class="map-placeholder"><div class="empty-card"><span class="empty-icon">↗</span><h2>每一段旅程，从这里开始</h2><p id="map-message" data-dynamic>连接高德地图，查看你的路线。</p><button id="connect" class="button primary">配置高德地图</button><small>支持中国国内路线规划</small></div></div>
       <div class="map-badge">行途 <span>·</span> 路线规划</div>
     </section>
   </main>
-  <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。第一行为起点，最后一行为终点；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>
+  <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。第一行为起点，最后一行为终点；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" data-dynamic role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>
   <dialog id="config-dialog">
     <form id="config-form">
       <div class="dialog-title"><h2>连接高德地图</h2><button id="close-dialog" type="button" class="icon-button" aria-label="关闭">×</button></div>
@@ -66,7 +67,7 @@
       <label for="service-host">安全代理地址（可选）</label><input id="service-host" type="url" placeholder="https://你的域名/_AMapService">
       <p class="hint">本地体验填安全密钥；正式部署建议使用安全代理。代理地址和安全密钥至少填写一项。</p>
       <a href="https://lbs.amap.com/" target="_blank" rel="noopener noreferrer">前往高德开放平台申请 ↗</a>
-      <p id="config-error" role="alert"></p><button class="button primary" type="submit">保存并连接</button>
+      <p id="config-error" data-dynamic role="alert"></p><button class="button primary" type="submit">保存并连接</button>
     </form>
   </dialog>
 </body>
