@@ -13,6 +13,7 @@ function addressIds() { return ['start', ...stops, 'end']; }
 let map, planner, loadedConfig, busy = false, routeVersion = 0;
 let appliedMapStyle = null, themeFrame = 0, themeMapTimer = 0, themePreferenceTimer = 0, pendingTheme = null;
 let recommendedPoints = null, copiedItinerary = '';
+let mapPlaceWindow, mapPlaceCandidate = null, mapPlaceRequest = 0, mapPlaceTimer = 0, mapPlaceLoading = false, mapPlaceError = false;
 function updateAddressState() {
   const ids = addressIds();
   writeText('address-count', () => ids.filter((id) => selected[id]).length + '/' + ids.length + t(' 已确认'));
@@ -84,8 +85,12 @@ $('theme-toggle').onclick = () => {
 };
 syncThemeButton();
 let config = { ...window.NAV_CONFIG };
-try { if (!config.managed) config = { ...config, ...JSON.parse(sessionStorage.getItem('xingtu-config') || '{}') }; } catch { /* Storage can be disabled. */ }
-if (config.managed) { $('settings').hidden = true; $('connect').hidden = true; }
+try {
+  const saved = JSON.parse(sessionStorage.getItem('xingtu-config') || 'null');
+  if (typeof saved?.key === 'string' && saved.key.trim() && ((typeof saved.securityJsCode === 'string' && saved.securityJsCode.trim()) || (typeof saved.serviceHost === 'string' && saved.serviceHost.trim()))) {
+    config = { ...config, ...saved, key: saved.key.trim(), securityJsCode: typeof saved.securityJsCode === 'string' ? saved.securityJsCode.trim() : '', serviceHost: typeof saved.serviceHost === 'string' ? saved.serviceHost.trim() : '', managed: false };
+  }
+} catch { /* Storage can be disabled. */ }
 $('city').value = config.defaultCity || '北京';
 function status(message, error = false) { writeText('status', () => typeof message === 'function' ? message() : t(message)); $('status').classList.toggle('error', error); }
 function mode() { return document.querySelector('input[name="mode"]:checked').value; }
@@ -99,9 +104,9 @@ function clearRoute() {
   $('route-panel').replaceChildren();
 }
 function openSettings() {
-  $('api-key').value = config.key || '';
-  $('security-code').value = config.securityJsCode || '';
-  $('service-host').value = config.serviceHost || '';
+  $('api-key').value = config.managed ? '' : config.key || '';
+  $('security-code').value = config.managed ? '' : config.securityJsCode || '';
+  $('service-host').value = config.managed ? '' : config.serviceHost || '';
   writeText('config-error', () => '');
   $('config-dialog').showModal();
 }
@@ -110,7 +115,8 @@ $('connect').onclick = openSettings;
 $('close-dialog').onclick = () => $('config-dialog').close();
 $('config-form').onsubmit = (event) => {
   event.preventDefault();
-  const next = { ...config, key: $('api-key').value.trim(), securityJsCode: $('security-code').value.trim(), serviceHost: $('service-host').value.trim() };
+  const next = { ...config, managed: false, key: $('api-key').value.trim(), securityJsCode: $('security-code').value.trim(), serviceHost: $('service-host').value.trim() };
+  if (!next.key) { writeText('config-error', () => t('请填写高德 JS API Key。')); return; }
   if (!next.securityJsCode && !next.serviceHost) { writeText('config-error', () => t('请填写安全密钥或安全代理地址。')); return; }
   try { sessionStorage.setItem('xingtu-config', JSON.stringify(next)); } catch { writeText('config-error', () => t('浏览器禁止会话存储，请改为编辑 config.js 后刷新页面。')); return; }
   // Reload ensures the SDK uses the new security configuration, without mixing old map instances.
@@ -131,18 +137,83 @@ async function loadMap() {
       script.onerror = () => { clearTimeout(timer); reject(new Error('无法连接高德地图，请检查网络。')); };
       document.head.append(script);
     });
-    map = new AMap.Map('map', { zoom: 12, center: config.center, viewMode: '2D', resizeEnable: true, mapStyle: mapStyle() });
+    map = new AMap.Map('map', { zoom: 12, center: config.center, viewMode: '2D', resizeEnable: true, mapStyle: mapStyle(), isHotspot: true });
+    bindMapPlaces();
     appliedMapStyle = mapStyle();
     map.addControl(new AMap.ToolBar({ position: 'RB' }));
     map.addControl(new AMap.Scale());
     loadedConfig = true;
     $('map-placeholder').hidden = true;
-    status(() => t('地图已连接。输入地址后，请从候选地点中选择。'));
+    status(() => t('地图已连接。输入地址确认位置，或点击地图地点图标添加途经点。'));
   } catch (error) {
     writeText('map-message', () => t(error.message));
     $('connect').hidden = false;
     status(() => t(error.message), true);
   }
+}
+function closeMapPlace() {
+  mapPlaceRequest++;
+  clearTimeout(mapPlaceTimer);
+  mapPlaceCandidate = null;
+  mapPlaceWindow?.close();
+}
+function mapPlaceBlocked(place) {
+  if (stops.some((id) => selected[id] && ((place.id && selected[id].id === place.id) || sameLocation(selected[id].location, place.location)))) return '该地点已在途经点中。';
+  if (stops.length >= 6) return '最多添加 6 个途经点，请先删除一个地址。';
+  return '';
+}
+function renderMapPlace() {
+  if (!mapPlaceCandidate) return;
+  const place = mapPlaceCandidate;
+  const request = mapPlaceRequest;
+  const blocked = mapPlaceLoading || mapPlaceError ? '' : mapPlaceBlocked(place);
+  const card = document.createElement('div'); card.className = 'map-place-card';
+  card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', t('添加途经点'));
+  // Keep place names and addresses as text, including any markup in provider data.
+  const name = document.createElement('strong'); name.textContent = place.name || t('地图地点');
+  const address = document.createElement('p'); address.className = 'map-place-address'; address.textContent = typeof place.address === 'string' ? place.address : ''; address.hidden = !address.textContent;
+  const message = document.createElement('p'); message.className = 'map-place-message'; message.setAttribute('role', 'status');
+  message.textContent = t(mapPlaceLoading ? '正在读取地点信息…' : mapPlaceError ? '地点信息读取失败，请重新点击图标重试。' : blocked || '将这个地点添加为途经点？');
+  const actions = document.createElement('div'); actions.className = 'map-place-actions';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'button secondary'; cancel.textContent = t('取消'); cancel.onclick = closeMapPlace;
+  const confirm = document.createElement('button'); confirm.type = 'button'; confirm.className = 'button primary'; confirm.textContent = t('＋ 确认添加'); confirm.disabled = mapPlaceLoading || mapPlaceError || Boolean(blocked);
+  confirm.onclick = () => {
+    if (request !== mapPlaceRequest || place !== mapPlaceCandidate || mapPlaceLoading || mapPlaceError) return;
+    const reason = mapPlaceBlocked(place);
+    if (reason) { renderMapPlace(); return; }
+    const id = addStop(false);
+    if (!id) return;
+    versions[id]++; selected[id] = place; $(id).value = place.name;
+    hideOptions(); updateAddressState(); closeMapPlace();
+    $(id).focus();
+    status(() => t('已添加途经点：') + place.name + t('。请重新规划路线。'));
+  };
+  card.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMapPlace(); });
+  actions.append(cancel, confirm); card.append(name, address, message, actions);
+  mapPlaceWindow.setContent(card);
+}
+function bindMapPlaces() {
+  mapPlaceWindow = new AMap.InfoWindow({ isCustom: true, offset: new AMap.Pixel(0, -12), closeWhenClickMap: false });
+  map.on('hotspotclick', (hotspot) => {
+    closeMapPlace();
+    if (!hotspot.id || !hotspot.lnglat) return;
+    const request = mapPlaceRequest;
+    mapPlaceCandidate = { id: hotspot.id, name: hotspot.name, location: hotspot.lnglat };
+    mapPlaceLoading = true; mapPlaceError = false;
+    renderMapPlace(); mapPlaceWindow.open(map, hotspot.lnglat);
+    const finish = (resultStatus, result) => {
+      if (request !== mapPlaceRequest || !mapPlaceLoading) return;
+      clearTimeout(mapPlaceTimer);
+      const place = result?.poiList?.pois?.[0];
+      mapPlaceLoading = false;
+      mapPlaceError = resultStatus !== 'complete' || !place?.location || !place?.name;
+      if (!mapPlaceError) mapPlaceCandidate = { ...place, id: place.id || hotspot.id };
+      renderMapPlace();
+    };
+    mapPlaceTimer = setTimeout(() => finish('error'), 10000);
+    try { new AMap.PlaceSearch().getDetails(hotspot.id, finish); }
+    catch { finish('error'); }
+  });
 }
 function showPlaces(id, places) {
   const box = $(id + '-options');
@@ -447,6 +518,7 @@ window.I18n.onChange(() => {
   syncThemeButton();
   addressIds().forEach(id => { if (selected[id]?.currentLocation) $(id).value = pointName(selected[id]); });
   updateMultiOptions();
+  renderMapPlace();
   if (renderOrder) renderOrder();
   localizedText.forEach((render, id) => { $(id).textContent = render(); });
 });

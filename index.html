@@ -60,12 +60,12 @@
   <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。第一行为起点，最后一行为终点；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" data-dynamic role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>
   <dialog id="config-dialog">
     <form id="config-form">
-      <div class="dialog-title"><h2>连接高德地图</h2><button id="close-dialog" type="button" class="icon-button" aria-label="关闭">×</button></div>
-      <p>在高德开放平台创建「Web 端（JS API）」Key。配置仅保存在当前浏览器会话中。</p>
+      <div class="dialog-title"><h2>地图设置</h2><button id="close-dialog" type="button" class="icon-button" aria-label="关闭">×</button></div>
+      <p>填写你自己的「Web 端（JS API）」Key，保存后优先使用你的配置。配置仅保存在当前浏览器会话中。</p>
       <label for="api-key">高德 JS API Key</label><input id="api-key" required autocomplete="off" placeholder="填入你的 Key">
-      <label for="security-code">安全密钥 securityJsCode</label><input id="security-code" type="password" autocomplete="off" placeholder="本地开发使用">
+      <label for="security-code">安全密钥 securityJsCode</label><input id="security-code" type="password" autocomplete="off" placeholder="填写与 Key 配套的安全密钥">
       <label for="service-host">安全代理地址（可选）</label><input id="service-host" type="url" placeholder="https://你的域名/_AMapService">
-      <p class="hint">本地体验填安全密钥；正式部署建议使用安全代理。代理地址和安全密钥至少填写一项。</p>
+      <p class="hint">填写安全密钥时，可将代理地址留空。使用代理时，请填写与你的 Key 配套的代理地址。</p>
       <a href="https://lbs.amap.com/" target="_blank" rel="noopener noreferrer">前往高德开放平台申请 ↗</a>
       <p id="config-error" data-dynamic role="alert"></p><button class="button primary" type="submit">保存并连接</button>
     </form>
