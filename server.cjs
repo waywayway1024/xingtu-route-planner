@@ -14,6 +14,7 @@ const server = http.createServer((req, res) => {
   });
 });
 files['/i18n.js'] = ['i18n.js', 'text/javascript'];
+files['/live-location.js'] = ['live-location.js', 'text/javascript'];
 files['/route-optimizer.js'] = ['route-optimizer.js', 'text/javascript'];
 server.on('error', (error) => { console.error(error.code === 'EADDRINUSE' ? 'Port 8080 is busy. Set PORT to another port.' : error.message); process.exitCode = 1; });
 server.listen(Number(process.env.PORT || 8080), '127.0.0.1', () => console.log('行途已启动：http://localhost:' + server.address().port + '\n按 Ctrl+C 停止服务。'));

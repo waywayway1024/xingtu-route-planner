@@ -14,6 +14,7 @@
   <script src="config.js" defer></script>
   <script src="route-optimizer.js" defer></script>
   <script src="i18n.js" defer></script>
+  <script src="live-location.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -23,27 +24,55 @@
   </header>
   <main class="workspace">
     <aside class="sidebar">
-      <div class="intro"><span class="eyebrow">YOUR NEXT JOURNEY</span><h1>下一站，去哪里？</h1><p>从熟悉的街道，到想去的远方。</p></div>
-      <form id="route-form">
+      <div class="intro"><span class="eyebrow">YOUR NEXT JOURNEY</span><h1>想去的地方，一次安排</h1><p>输入地点，让程序帮你安排第一站到最后一站。</p></div>
+      <div class="route-tabs" role="tablist" aria-label="选择路线方式"><button id="current-tab" type="button" role="tab" aria-controls="current-route-panel" aria-selected="true" tabindex="0">从当前位置出发</button><button id="custom-tab" type="button" role="tab" aria-controls="custom-route-panel" aria-selected="false" tabindex="-1">自定义路线</button></div>
+      <section id="current-route-panel" role="tabpanel" aria-labelledby="current-tab">
+        <p class="panel-intro">定位你的出发位置，只需选择目的地。</p>
+        <div class="current-origin"><span class="current-origin-dot" aria-hidden="true"></span><div><strong>当前位置</strong><p id="current-origin-status" data-dynamic role="status">请先获取当前位置</p></div><button id="current-locate" class="text-button" type="button">获取位置</button></div>
+        <form id="current-route-form">
+          <div class="location-field current-destination-field"><label for="current-destination">目的地</label><input id="current-destination" placeholder="输入你想去的地址或地点" autocomplete="off" required aria-controls="current-destination-options"><div id="current-destination-options" class="suggestions" hidden></div><small id="current-destination-state" data-dynamic class="address-state">等待输入目的地</small></div>
+          <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="current-mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="current-mode" value="transfer"><span>公交</span></label><label><input type="radio" name="current-mode" value="walking"><span>步行</span></label><label><input type="radio" name="current-mode" value="riding"><span>骑行</span></label></fieldset>
+          <div id="current-policy-field"><label for="current-policy">驾车偏好</label><select id="current-policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
+          <div id="current-city-field" hidden><label for="current-city">出发城市（公交）</label><input id="current-city" placeholder="规划时自动识别，也可手动填写" autocomplete="off"><small class="address-state">根据规划时的位置识别出发城市，不使用默认搜索城市。</small></div>
+          <button id="current-plan" class="button primary" type="submit" disabled>规划路线 <span>→</span></button>
+          <p class="panel-note">路线采用点击规划时的位置。移动后，可再次规划。</p>
+        </form>
+      </section>
+      <section id="custom-route-panel" role="tabpanel" aria-labelledby="custom-tab" hidden>
+      <p class="panel-intro">自行选择起点、终点和需要到访的地址。</p>
+      <form id="route-form" novalidate>
         <label class="city-label" for="city">搜索城市 <span>用于缩小地点搜索范围</span></label>
         <input id="city" placeholder="例如：上海" value="北京" autocomplete="off">
+        <section class="tour-entry" aria-label="自动安排游玩路线">
+          <h2>把想去的地点，都放进来</h2>
+          <p>每行一个地点，共 2–8 个，顺序随意。起点、终点从这些地点中自动选择，无需返回第一站。</p>
+          <label for="tour-places">游玩地点</label>
+          <textarea id="tour-places" rows="5" placeholder="天坛公园&#10;颐和园&#10;故宫博物院&#10;北海公园" aria-describedby="tour-hint"></textarea>
+          <label for="tour-objective">路线偏好</label>
+          <select id="tour-objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option></select>
+          <button id="plan-tour" type="button" class="button primary">自动安排游玩路线 →</button>
+          <small id="tour-hint">按实际驾车路线比较。耗时不含景点游玩时间，也不考虑营业时间；同名地点需要确认。</small>
+        </section>
+        <details id="address-details"><summary>手动输入或确认地点</summary>
         <div class="locations">
-          <div class="location-field"><label for="start"><span class="dot start-dot"></span>起点</label><input id="start" placeholder="输入地址或地点名称" autocomplete="off" required aria-controls="start-options"><div id="start-options" class="suggestions" hidden></div></div>
+          <div class="location-field"><label for="start" data-dynamic><span class="dot start-dot"></span>起点</label><input id="start" placeholder="输入地址或地点名称" autocomplete="off" required aria-controls="start-options"><div id="start-options" class="suggestions" hidden></div></div>
           <button id="swap" type="button" class="swap" aria-label="交换起点和终点">⇅</button>
           <div id="stops" data-dynamic></div>
           <div class="location-field"><label for="end" data-dynamic><span class="dot end-dot"></span>终点</label><input id="end" placeholder="你想去哪里？" autocomplete="off" required aria-controls="end-options"><div id="end-options" class="suggestions" hidden></div></div>
         </div>
         <div class="address-actions"><button id="add-stop" type="button" class="text-button">＋ 添加地址</button><button id="open-batch" type="button" class="text-button">批量输入</button><span id="address-count" data-dynamic class="address-count" aria-live="polite"></span></div>
         <section id="optimization-options" class="optimization-options" hidden>
-          <label for="end-mode">最后一站</label><select id="end-mode"><option value="fixed">固定终点，自动安排中间地址</option><option value="free">最后一站不限，全部地址自动排序</option></select>
+          <label for="end-mode">起终点安排</label><select id="end-mode"><option value="fixed">固定终点，自动安排中间地址</option><option value="free">最后一站不限，全部地址自动排序</option><option value="auto">起点、终点都自动安排</option></select>
           <label for="objective">优化目标</label><select id="objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option></select>
           <p>最多 8 个地址（含起点）。多地址优化仅支持驾车，按实际道路查询比较访问顺序。</p>
         </section>
         <button id="locate" type="button" class="text-button">◎ 使用我的位置作为起点</button>
+        </details>
         <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="mode" value="transfer"><span>公交</span></label><label><input type="radio" name="mode" value="walking"><span>步行</span></label><label><input type="radio" name="mode" value="riding"><span>骑行</span></label></fieldset>
         <div id="policy-field"><label for="policy">驾车偏好</label><select id="policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
         <button id="plan" class="button primary" type="submit">规划路线 <span>→</span></button>
       </form>
+      </section>
       <p id="status" data-dynamic class="status" role="status" aria-live="polite">配置地图后，即可开始规划。</p>
       <section id="planning-progress" class="planning-progress" hidden aria-label="路线计算进度"><div><span id="progress-label" data-dynamic>正在计算路线</span><button id="cancel-plan" type="button" class="text-button">取消计算</button></div><progress id="progress-bar" max="100"></progress><small>地址较多时需要几十秒，请稍候。</small></section>
       <section id="summary" class="summary" hidden><span class="eyebrow">推荐方案</span><div><strong id="duration" data-dynamic></strong><span id="distance" data-dynamic></span></div><p id="route-caption" data-dynamic></p></section>
@@ -55,9 +84,14 @@
       <div id="map"></div>
       <div id="map-placeholder" class="map-placeholder"><div class="empty-card"><span class="empty-icon">↗</span><h2>每一段旅程，从这里开始</h2><p id="map-message" data-dynamic>连接高德地图，查看你的路线。</p><button id="connect" class="button primary">配置高德地图</button><small>支持中国国内路线规划</small></div></div>
       <div class="map-badge">行途 <span>·</span> 路线规划</div>
+      <section id="live-controls" class="live-controls" hidden aria-label="实时位置与方向">
+        <div class="live-actions"><button id="live-toggle" type="button" aria-pressed="false">◎ 定位我</button><button id="live-recenter" type="button" disabled>回到位置</button><button id="live-direction" type="button" aria-pressed="false" disabled>开启方向</button></div>
+        <p id="live-position-status" data-dynamic role="status">定位尚未开启</p><p id="live-direction-status" data-dynamic role="status">方向尚未开启</p>
+        <small>箭头表示手机屏幕顶部朝向。请尽量平放手机，顶部指向面前。</small>
+      </section>
     </section>
   </main>
-  <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。第一行为起点，最后一行为终点；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" data-dynamic role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>
+  <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。依次填入地址栏，起终点按当前安排选项确定；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" data-dynamic role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>
   <dialog id="config-dialog">
     <form id="config-form">
       <div class="dialog-title"><h2>地图设置</h2><button id="close-dialog" type="button" class="icon-button" aria-label="关闭">×</button></div>

@@ -4,7 +4,7 @@ import { assets } from './site-assets.mjs';
 const permittedPaths = new Set([
   '/v3/place/text', '/v3/place/detail', '/v3/place/around', '/v3/assistant/inputtips',
   '/v3/direction/driving', '/v3/direction/walking', '/v3/direction/transit/integrated',
-  '/v3/geocode/geo', '/v3/geocode/regeo', '/v3/ip', '/v3/config/district',
+  '/v3/geocode/geo', '/v3/geocode/regeo', '/v3/ip', '/v3/config/district', '/v3/assistant/coordinate/convert',
   '/v4/direction/bicycling', '/v4/geolocation/ip', '/v5/direction/driving',
   '/v5/direction/walking', '/v5/direction/bicycling', '/v5/direction/transit/integrated',
 ]);
@@ -33,9 +33,25 @@ export default {
       upstream.searchParams.set('key', env.AMAP_JS_KEY);
       upstream.searchParams.set('jscode', env.AMAP_SECURITY_CODE);
       try {
-        const result = await fetch(upstream, { redirect: 'error', signal: AbortSignal.timeout(12000) });
-        return new Response(request.method === 'HEAD' ? null : result.body, { status: result.status, headers: { ...responseHeaders, 'Content-Type': result.headers.get('Content-Type') || 'application/json', 'Cache-Control': 'no-store' } });
-      } catch { return new Response('Map service temporarily unavailable', { status: 502 }); }
+        const result = await fetch(upstream, { redirect: 'manual', signal: AbortSignal.timeout(12000) });
+        if (result.status >= 300 && result.status < 400) {
+          await result.body?.cancel();
+          throw new Error('Map service redirected');
+        }
+        // The SDK loads JSONP as a script. AMap can label it application/json,
+        // which browsers correctly block when this proxy sends nosniff.
+        const callback = url.searchParams.get('callback');
+        const contentType = callback && /^[\w$.]+$/.test(callback) ? 'text/javascript; charset=utf-8' : result.headers.get('Content-Type') || 'application/json';
+        return new Response(request.method === 'HEAD' ? null : result.body, { status: result.status, headers: { ...responseHeaders, 'Content-Type': contentType, 'Cache-Control': 'no-store' } });
+      } catch (error) {
+        let message = String(error?.message || error);
+        // Keep credentials and requested coordinates out of diagnostic messages.
+        for (const value of [upstream.href, ...upstream.searchParams.values()]) {
+          if (value) message = message.split(value).join('[redacted]').split(encodeURIComponent(value)).join('[redacted]');
+        }
+        console.error('AMap proxy failed', { path: upstreamPath, message: message.slice(0, 300), timeoutAvailable: typeof AbortSignal.timeout === 'function' });
+        return new Response('Map service temporarily unavailable', { status: 502 });
+      }
     }
     const asset = assets[url.pathname === '/' ? '/index.html' : url.pathname];
     if (!asset) return new Response('Not found', { status: 404 });

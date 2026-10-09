@@ -34,5 +34,16 @@ function optimizeRoute(matrix, fixedEnd = true) {
   path.reverse();
   return { order: [0, ...path, ...(fixedEnd ? [n - 1] : [])], cost: best };
 }
-if (typeof module !== 'undefined') module.exports = { optimizeRoute };
-else window.RouteOptimizer = { optimizeRoute };
+// Reuse the exact directed path solver for every possible starting place.
+function optimizeTourRoute(matrix) {
+  if (!Array.isArray(matrix) || matrix.length < 2 || matrix.length > 8 || matrix.some((row) => !Array.isArray(row) || row.length !== matrix.length || row.some((value) => typeof value !== 'number' || value < 0 || Number.isNaN(value)))) throw new Error('路线矩阵不合法');
+  let best = null;
+  for (let start = 0; start < matrix.length; start++) {
+    const indices = [start, ...Array.from({ length: matrix.length }, (_, i) => i).filter((i) => i !== start)];
+    const candidate = optimizeRoute(indices.map((i) => indices.map((j) => matrix[i][j])), false);
+    if (candidate && (!best || candidate.cost < best.cost)) best = { order: candidate.order.map((i) => indices[i]), cost: candidate.cost };
+  }
+  return best;
+}
+if (typeof module !== 'undefined') module.exports = { optimizeRoute, optimizeTourRoute };
+else window.RouteOptimizer = { optimizeRoute, optimizeTourRoute };
