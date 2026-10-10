@@ -1,0 +1,5 @@
+stage/
+out/
+*.tar.gz
+*.private.env
+*.private.json

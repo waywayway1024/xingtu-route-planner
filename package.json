@@ -1,6 +1,6 @@
 {
   "name": "xingtu-route-planner",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "基于高德地图 JS API 的国内路线规划网页",
   "scripts": {
