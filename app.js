@@ -21,6 +21,9 @@ let activeRoutePanel = 'current', panelVersion = 0, currentDestination = null, c
 let currentDestinationSearch = null;
 const addressSearches = new Map(), addressTimers = new Map();
 let currentCityManual = false, currentCityCache = null, cancelRouteQuery = null;
+let usageReady = false, usageDirty = false, usageTimer = 0, savedMapView = null, lastRoute = null;
+const savedRouteOverlays = [];
+const memoryFields = ['city', 'tour-places', 'tour-objective', 'end-mode', 'objective', 'policy', 'current-destination', 'current-policy', 'current-city'];
 function freshCurrentPosition() {
   return liveState?.positionState === 'active' && livePosition && Date.now() - livePosition.timestamp <= 30000 ? livePosition : null;
 }
@@ -222,6 +225,7 @@ function updateAddressState() {
       handle.setAttribute('aria-label', t('拖动途经地址 ') + index + t(' 调整顺序，也可使用上下方向键'));
     }
   });
+  rememberUsage();
 }
 function progress(label, value) {
   writeText('progress-label', () => typeof label === 'function' ? label() : t(label));
@@ -279,6 +283,7 @@ try {
   }
 } catch { /* Storage can be disabled. */ }
 $('city').value = config.defaultCity || '北京';
+const memoryDefaults = { city: config.defaultCity || '北京', 'tour-places': '', 'tour-objective': 'time', 'end-mode': 'fixed', objective: 'time', policy: '0', 'current-destination': '', 'current-policy': '0', 'current-city': '' };
 function status(message, error = false) { writeText('status', () => typeof message === 'function' ? message() : t(message)); $('status').classList.toggle('error', error); }
 function mode() { return document.querySelector('input[name="mode"]:checked').value; }
 function hideOptions() {
@@ -290,10 +295,14 @@ function clearRoute() {
   routeVersion++;
   if (cancelRouteQuery) cancelRouteQuery();
   recommendedPoints = null; copiedItinerary = ''; renderOrder = null;
+  lastRoute = null;
+  savedRouteOverlays.splice(0).forEach(overlay => overlay.setMap(null));
+  $('saved-route-note').hidden = true;
   if (planner) planner.clear();
   $('summary').hidden = true;
   $('visit-order').hidden = true;
   $('route-panel').replaceChildren();
+  rememberUsage();
 }
 function openSettings() {
   $('api-key').value = config.managed ? '' : config.key || '';
@@ -329,15 +338,19 @@ async function loadMap() {
       script.onerror = () => { clearTimeout(timer); reject(new Error('无法连接高德地图，请检查网络。')); };
       document.head.append(script);
     });
-    map = new AMap.Map('map', { zoom: 12, center: config.center, viewMode: '2D', resizeEnable: true, rotateEnable: false, mapStyle: mapStyle(), isHotspot: true });
+    map = new AMap.Map('map', { zoom: savedMapView?.zoom || 12, center: savedMapView?.center || config.center, viewMode: '2D', resizeEnable: true, rotateEnable: false, mapStyle: mapStyle(), isHotspot: true });
     bindMapPlaces();
     appliedMapStyle = mapStyle();
     map.addControl(new AMap.ToolBar({ position: 'RB' }));
     map.addControl(new AMap.Scale());
     loadedConfig = true;
     initializeLiveLocation();
+    drawSavedRoute();
+    map.on('moveend', rememberUsage); map.on('zoomend', rememberUsage);
     $('map-placeholder').hidden = true;
     status(() => t('地图已连接。输入地址确认位置，或点击地图地点图标添加途经点。'));
+    liveCentered = Boolean(savedMapView || lastRoute);
+    liveLocation.start();
   } catch (error) {
     writeText('map-message', () => t(error.message));
     $('connect').hidden = false;
@@ -674,7 +687,7 @@ $('locate').onclick = () => {
 $('live-toggle').onclick = () => { if (liveState?.enabled) liveLocation.stop(); else liveLocation.start(); };
 $('live-recenter').onclick = () => liveLocation.recenter();
 $('live-direction').onclick = () => liveLocation.enableDirection();
-function pointName(point) { return point.currentLocation ? t('我的位置') : point.name; }
+function pointName(point) { return point.currentLocation ? t(point.savedLocation ? '上次定位位置' : '我的位置') : point.name; }
 function duration(seconds) {
   const minutes = Math.max(1, Math.round(Number(seconds) / 60));
   return minutes >= 60 ? Math.floor(minutes / 60) + t('小时') + (minutes % 60 ? minutes % 60 + t('分钟') : '') : minutes + t('分钟');
@@ -778,8 +791,21 @@ async function planRoute(event, fromCurrent = false) {
     ensureCurrent(request);
     const routes = result?.routes || result?.plans;
     if (!routes?.length) throw new Error('未找到可用路线，请调整地点或出行方式。');
-      const route = routes[0];
-      renderOrder = () => {
+    const route = routes[0];
+    lastRoute = { route: { time: route.time, distance: route.distance }, points: points.map(memoryPoint), multi, baseline: Number.isFinite(baseline) ? baseline : null, optimized: optimized ? { cost: optimized.cost } : null, objective, ...routeGeometry(route) };
+    renderOrder = () => renderRouteSummary({ route, points, multi, baseline, optimized, objective });
+    renderOrder();
+    rememberUsage();
+    status(() => multi ? t('已生成经过全部地址的推荐路线。') : t('找到 ') + routes.length + t(' 个方案，可在下方查看路线详情。'));
+  } catch (error) {
+    if (activePlanner) activePlanner.clear();
+    if (activeRoutePanel === ownerPanel && requestPanel === panelVersion) {
+      if (request === routeVersion) status(() => t(error.message || '规划失败，请稍后重试。'), true);
+      else status(() => $('cancel-plan').disabled ? t('计算已取消，可以重新规划。') : t('地址或选项已改变，请重新规划。'));
+    }
+  } finally { busy = false; $('plan').disabled = false; $('plan-tour').disabled = false; syncCurrentForm(); $('apply-order').disabled = false; $('planning-progress').hidden = true; }
+}
+function renderRouteSummary({ route, points, multi, baseline, optimized, objective }) {
       writeText('duration', () => Number.isFinite(Number(route.time)) ? duration(route.time) : t('查看路线详情'));
       writeText('distance', () => Number.isFinite(Number(route.distance)) ? (Number(route.distance) / 1000).toFixed(1) + t(' 公里') : '');
       writeText('route-caption', () => points.map((point) => pointName(point)).join(' → '));
@@ -799,16 +825,6 @@ async function planRoute(event, fromCurrent = false) {
       recommendedPoints = points.slice();
       copiedItinerary = t('manmanhang · 推荐行程\n') + points.map((point, i) => (i + 1) + '. ' + pointName(point) + (typeof point.address === 'string' && point.address ? t('（') + point.address + t('）') : '')).join('\n') + t('\n预计 ') + $('duration').textContent + ' · ' + $('distance').textContent + '\n' + comparison + t('\n预计耗时仅供参考，请以实际路况为准。');
     }
-      };
-      renderOrder();
-    status(() => multi ? t('已生成经过全部地址的推荐路线。') : t('找到 ') + routes.length + t(' 个方案，可在下方查看路线详情。'));
-  } catch (error) {
-    if (activePlanner) activePlanner.clear();
-    if (activeRoutePanel === ownerPanel && requestPanel === panelVersion) {
-      if (request === routeVersion) status(() => t(error.message || '规划失败，请稍后重试。'), true);
-      else status(() => $('cancel-plan').disabled ? t('计算已取消，可以重新规划。') : t('地址或选项已改变，请重新规划。'));
-    }
-  } finally { busy = false; $('plan').disabled = false; $('plan-tour').disabled = false; syncCurrentForm(); $('apply-order').disabled = false; $('planning-progress').hidden = true; }
 }
 $('route-form').onsubmit = (event) => planRoute(event);
 $('current-route-form').onsubmit = (event) => planRoute(event, true);
@@ -825,4 +841,99 @@ updateMultiOptions();
 switchRoutePanel('current', false);
 writeText('status', () => t('配置地图后，即可开始规划。'));
 writeText('map-message', () => t('连接高德地图，查看你的路线。'));
+restoreUsage();
+usageReady = true;
 loadMap();
+
+function coordinates(location) {
+  const values = Array.isArray(location) ? location : typeof location === 'string' ? location.split(',').map(Number) : [location?.getLng?.() ?? location?.lng, location?.getLat?.() ?? location?.lat];
+  return values?.length === 2 && values.every(Number.isFinite) && Math.abs(values[0]) <= 180 && Math.abs(values[1]) <= 90 ? values.slice() : null;
+}
+function memoryPoint(point) {
+  const location = coordinates(point?.location);
+  if (!location || typeof point?.name !== 'string') return null;
+  return { name: point.name, location, address: typeof point.address === 'string' ? point.address : '', cityname: typeof point.cityname === 'string' ? point.cityname : '', id: typeof point.id === 'string' ? point.id : '', currentLocation: Boolean(point.currentLocation) };
+}
+function routeGeometry(route) {
+  const paths = [], instructions = [];
+  function visit(part) {
+    if (!part || typeof part !== 'object') return;
+    if (typeof part.instruction === 'string') instructions.push(part.instruction);
+    if (Array.isArray(part.path)) { const path = part.path.map(coordinates).filter(Boolean); if (path.length > 1) paths.push(path); }
+    for (const [key, value] of Object.entries(part)) if (key !== 'path') { if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === 'object') visit(value); }
+  }
+  visit(route);
+  return { paths, instructions };
+}
+function rememberUsage() {
+  if (!usageReady) return;
+  usageDirty = true; clearTimeout(usageTimer); usageTimer = setTimeout(saveUsage, 250);
+}
+function saveUsage() {
+  clearTimeout(usageTimer); usageTimer = 0;
+  if (!usageDirty) return;
+  try {
+    if (map?.getCenter && map?.getZoom) savedMapView = { center: coordinates(map.getCenter()), zoom: map.getZoom() };
+    const data = { version: 1, panel: activeRoutePanel, fields: Object.fromEntries(memoryFields.map(id => [id, $(id).value])), modes: { custom: mode(), current: currentMode() }, addresses: addressIds().map(id => ({ text: $(id).value, point: memoryPoint(selected[id]) })), currentDestination: memoryPoint(currentDestination), currentCityManual, tourInputSnapshot, addressDetailsOpen: Boolean($('address-details').open), mapView: savedMapView, route: lastRoute };
+    localStorage.setItem('xingtu-usage', JSON.stringify(data));
+    usageDirty = false;
+    writeText('memory-status', () => t('使用数据已保存在此浏览器，关闭网页后仍会保留。'));
+  } catch { writeText('memory-status', () => t('无法保存使用数据，请允许浏览器存储或释放存储空间。')); }
+}
+function validSavedRoute(route) {
+  return route && Number.isFinite(route.route?.time) && route.route.time >= 0 && Number.isFinite(route.route?.distance) && route.route.distance >= 0 && Array.isArray(route.points) && route.points.length >= 2 && route.points.length <= 8 && route.points.every(memoryPoint) && typeof route.multi === 'boolean' && (!route.multi || Number.isFinite(route.optimized?.cost)) && ['time', 'distance'].includes(route.objective) && (route.baseline === null || Number.isFinite(route.baseline)) && Array.isArray(route.paths) && route.paths.every(path => Array.isArray(path) && path.every(coordinates)) && Array.isArray(route.instructions) && route.instructions.every(text => typeof text === 'string');
+}
+function restoreUsage() {
+  // Restore before enabling saves, so startup cannot overwrite the previous session.
+  try {
+    const raw = localStorage.getItem('xingtu-usage');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data?.version !== 1 || !Array.isArray(data.addresses) || data.addresses.length < 2 || data.addresses.length > 8 || !data.addresses.every(item => typeof item?.text === 'string' && (item.point === null || memoryPoint(item.point))) || !data.fields || typeof data.fields !== 'object' || Array.isArray(data.fields) || !Object.values(data.fields).every(value => typeof value === 'string') || !['current', 'custom'].includes(data.panel) || !['driving', 'transfer', 'walking', 'riding'].includes(data.modes?.custom) || !['driving', 'transfer', 'walking', 'riding'].includes(data.modes?.current)) throw new Error('Invalid usage data');
+    importAddresses(data.addresses.map(item => item.text));
+    addressIds().forEach((id, i) => { selected[id] = memoryPoint(data.addresses[i].point); if (selected[id]?.currentLocation) { selected[id].savedLocation = true; $(id).value = pointName(selected[id]); } });
+    for (const id of Object.keys(memoryDefaults)) if (typeof data.fields[id] === 'string') $(id).value = data.fields[id];
+    for (const [id, allowed] of Object.entries({ 'end-mode': ['fixed', 'free', 'auto'], objective: ['time', 'distance'], 'tour-objective': ['time', 'distance'], policy: ['0', '1', '2', '4'], 'current-policy': ['0', '1', '2', '4'] })) if (!allowed.includes($(id).value)) $(id).value = memoryDefaults[id];
+    for (const [name, value] of [['mode', data.modes.custom], ['current-mode', data.modes.current]]) { const input = document.querySelector('input[name="' + name + '"][value="' + value + '"]'); if (input) input.checked = true; }
+    currentDestination = memoryPoint(data.currentDestination); currentCityManual = Boolean(data.currentCityManual);
+    tourInputSnapshot = typeof data.tourInputSnapshot === 'string' ? data.tourInputSnapshot : null;
+    $('address-details').open = Boolean(data.addressDetailsOpen);
+    if (coordinates(data.mapView?.center) && Number.isFinite(data.mapView.zoom) && data.mapView.zoom >= 2 && data.mapView.zoom <= 20) savedMapView = data.mapView;
+    updateMultiOptions(); switchRoutePanel(data.panel, false);
+    if (validSavedRoute(data.route)) {
+      lastRoute = data.route;
+      lastRoute.points.forEach(point => { if (point.currentLocation) point.savedLocation = true; });
+      renderOrder = () => renderRouteSummary({ ...lastRoute, baseline: lastRoute.baseline === null ? Infinity : lastRoute.baseline });
+      renderOrder(); $('saved-route-note').hidden = false;
+      const details = document.createElement('ol');
+      lastRoute.instructions.forEach(text => { const item = document.createElement('li'); item.textContent = text; details.append(item); });
+      $('route-panel').append(details);
+    }
+    writeText('memory-status', () => t('已恢复上次使用数据。只有手动清除才会删除。'));
+  } catch { writeText('memory-status', () => t('保存的使用数据无法恢复，请手动清除后重新开始。')); }
+}
+function drawSavedRoute() {
+  if (!lastRoute || !map) return;
+  for (const path of lastRoute.paths) savedRouteOverlays.push(new AMap.Polyline({ map, path, strokeColor: '#0091ff', strokeWeight: 5, strokeOpacity: 0.9 }));
+  for (const point of lastRoute.points) savedRouteOverlays.push(new AMap.Marker({ map, position: point.location, title: pointName(point) }));
+}
+document.addEventListener('input', event => { if (memoryFields.includes(event.target.id)) rememberUsage(); });
+document.addEventListener('change', event => { if (memoryFields.includes(event.target.id) || ['mode', 'current-mode'].includes(event.target.name)) rememberUsage(); });
+window.addEventListener('pagehide', saveUsage);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveUsage(); });
+$('clear-memory').onclick = () => {
+  if (!window.confirm(t('清除已保存的地址、行程和出行选项？地图配置、语言和主题会保留。'))) return;
+  try { localStorage.removeItem('xingtu-usage'); }
+  catch { writeText('memory-status', () => t('无法清除使用数据，请允许浏览器存储后重试。')); return; }
+  usageReady = false; clearTimeout(usageTimer); usageTimer = 0; usageDirty = false;
+  clearRoute(); hideOptions(); closeMapPlace(); clearStopDrag();
+  stops.forEach(id => { delete selected[id]; $(id + '-field').remove(); }); stops.length = 0;
+  for (const id of ['start', 'end']) { selected[id] = null; $(id).value = ''; }
+  for (const [id, value] of Object.entries(memoryDefaults)) $(id).value = value;
+  for (const name of ['mode', 'current-mode']) document.querySelector('input[name="' + name + '"][value="driving"]').checked = true;
+  currentDestination = null; currentCityManual = false; currentCityCache = null; tourInputSnapshot = null; savedMapView = null; pendingLocationStart = null;
+  $('locate').disabled = false; $('batch-addresses').value = ''; $('address-details').open = false;
+  updateMultiOptions(); syncCurrentForm();
+  usageReady = true;
+  writeText('memory-status', () => t('使用数据已清除。下次输入后会自动保存新的数据。'));
+};

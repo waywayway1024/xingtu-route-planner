@@ -25,6 +25,7 @@
   <main class="workspace">
     <aside class="sidebar">
       <div class="intro"><span class="eyebrow">YOUR NEXT JOURNEY</span><h1>想去的地方，一次安排</h1><p>输入地点，让程序帮你安排第一站到最后一站。</p></div>
+      <div class="memory-controls"><p id="memory-status" data-dynamic role="status" aria-live="polite">使用数据自动保存在此浏览器，直到手动清除。</p><button id="clear-memory" type="button" class="text-button">清除使用数据</button></div>
       <div class="route-tabs" role="tablist" aria-label="选择路线方式"><button id="current-tab" type="button" role="tab" aria-controls="current-route-panel" aria-selected="true" tabindex="0">从当前位置出发</button><button id="custom-tab" type="button" role="tab" aria-controls="custom-route-panel" aria-selected="false" tabindex="-1">自定义路线</button></div>
       <section id="current-route-panel" role="tabpanel" aria-labelledby="current-tab">
         <p class="panel-intro">定位你的出发位置，只需选择目的地。</p>
@@ -77,6 +78,7 @@
       <section id="planning-progress" class="planning-progress" hidden aria-label="路线计算进度"><div><span id="progress-label" data-dynamic>正在计算路线</span><button id="cancel-plan" type="button" class="text-button">取消计算</button></div><progress id="progress-bar" max="100"></progress><small>地址较多时需要几十秒，请稍候。</small></section>
       <section id="summary" class="summary" hidden><span class="eyebrow">推荐方案</span><div><strong id="duration" data-dynamic></strong><span id="distance" data-dynamic></span></div><p id="route-caption" data-dynamic></p></section>
       <section id="visit-order" class="visit-order" hidden><h2>推荐访问顺序</h2><ol id="order-list" data-dynamic></ol><p id="optimization-note" data-dynamic></p><div class="result-actions"><button id="apply-order" type="button" class="text-button">将顺序填回地址栏</button><button id="copy-order" type="button" class="text-button">复制行程</button></div></section>
+      <p id="saved-route-note" class="panel-note" hidden>上次规划结果（非实时），点击规划路线可更新。</p>
       <div id="route-panel" data-dynamic aria-label="路线详细信息"></div>
       <footer class="sidebar-footer">路线与预计耗时由高德地图提供<br>实际出行请以现场道路情况为准</footer>
     </aside>

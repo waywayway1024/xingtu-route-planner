@@ -1,6 +1,17 @@
 'use strict';
 window.I18n = (() => {
   const english = {
+  "上次定位位置": "Previous location",
+  "使用数据自动保存在此浏览器，直到手动清除。": "Usage data is saved in this browser until you clear it.",
+  "清除使用数据": "Clear usage data",
+  "使用数据已保存在此浏览器，关闭网页后仍会保留。": "Usage data is saved in this browser and kept after closing the page.",
+  "无法保存使用数据，请允许浏览器存储或释放存储空间。": "Cannot save usage data. Allow browser storage or free up storage space.",
+  "已恢复上次使用数据。只有手动清除才会删除。": "Your previous usage data has been restored. It stays until you clear it.",
+  "保存的使用数据无法恢复，请手动清除后重新开始。": "Saved usage data could not be restored. Clear it manually to start again.",
+  "清除已保存的地址、行程和出行选项？地图配置、语言和主题会保留。": "Clear saved addresses, itinerary and travel options? Map settings, language and theme will be kept.",
+  "无法清除使用数据，请允许浏览器存储后重试。": "Cannot clear usage data. Allow browser storage and try again.",
+  "使用数据已清除。下次输入后会自动保存新的数据。": "Usage data cleared. New entries will be saved automatically.",
+  "上次规划结果（非实时），点击规划路线可更新。": "Previous route result (not live). Plan again to update it.",
   "基础路线测试版": "Basic route preview",
   "想去的地方，一次安排": "Your places, one itinerary",
   "输入地点，让程序帮你安排第一站到最后一站。": "Enter your places and let us choose the first stop, last stop and order.",

@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 // A small DOM adapter exercises the app's actual handlers without calling AMap.
 function fixture(savedLanguage = null, settings = {}) {
-  const { navConfig = {}, savedConfig = null, initialPanel = 'custom' } = typeof settings === 'string' ? { initialPanel: settings } : settings;
+  const { navConfig = {}, savedConfig = null, initialPanel = 'custom', localValues = new Map() } = typeof settings === 'string' ? { initialPanel: settings } : settings;
   const elements = new Map();
   class Element {
     constructor(tag = 'div') { this.tag = tag; this.children = []; this.value = ''; this.hidden = false; this.disabled = false; this.attributes = {}; this.handlers = {}; this.textContent = ''; this.style = {}; }
@@ -43,11 +43,19 @@ function fixture(savedLanguage = null, settings = {}) {
   const currentRadio = new Element('input'); currentRadio.value = 'driving';
   const doc = {
     documentElement: { dataset: { theme: 'light' } }, getElementById: (id) => elements.get(id), createElement: (tag) => new Element(tag), handlers: {}, addEventListener(event, fn) { this.handlers[event] = fn; },
-    querySelector: (selector) => selector.includes('current-mode') ? currentRadio : selector.includes('mode') ? mode : selector.includes('label') ? elements.get(selector.includes('start') ? 'start' : 'end').parent.children[0] : new Element(),
+    querySelector: (selector) => {
+      if (selector.includes('mode')) {
+        const radio = selector.includes('current-mode') ? currentRadio : mode, value = selector.match(/\[value="([^"]+)"\]/)?.[1];
+        if (value) return { set checked(checked) { if (checked) radio.value = value; } };
+        return radio;
+      }
+      return selector.includes('label') ? elements.get(selector.includes('start') ? 'start' : 'end').parent.children[0] : new Element();
+    },
     querySelectorAll: selector => selector.includes('current-mode') ? [currentRadio] : [mode]
   };
   const pending = [], placePending = [], searches = [], geolocationPending = [], locationUpdates = [];
   const scripts = [], storageWrites = [];
+  const pageHandlers = {};
   const sessionValues = new Map();
   if (savedConfig !== null) sessionValues.set('xingtu-config', typeof savedConfig === 'string' ? savedConfig : JSON.stringify(savedConfig));
   let reloads = 0;
@@ -58,7 +66,7 @@ function fixture(savedLanguage = null, settings = {}) {
     clear() { clears++; }
     search(...args) { searches.push({ type, options: this.options, args: args.slice(0, -1) }); pending.push(args.at(-1)); }
   };
-  const context = vm.createContext({ document: doc, window: { NAV_CONFIG: { ...navConfig }, RouteOptimizer: require('../route-optimizer.js'), addEventListener() {} }, sessionStorage: { getItem: (key) => sessionValues.get(key) ?? null, setItem(key, value) { sessionValues.set(key, value); storageWrites.push({ key, value }); } }, location: { reload() { reloads++; } }, localStorage: { getItem: () => savedLanguage }, navigator: { clipboard: { writeText: async () => {} } }, URLSearchParams, setTimeout, clearTimeout, requestAnimationFrame: (callback) => setTimeout(callback, 0), cancelAnimationFrame: clearTimeout, AMap: { Driving: routeService('driving'), Transfer: routeService('transfer'), Walking: routeService('walking'), Riding: routeService('riding'), Geolocation: class { getCurrentPosition(callback) { geolocationPending.push(callback); } }, PlaceSearch: class { search(keyword, callback) { placePending.push({ keyword, callback }); } }, Map: class { constructor() { this.handlers = {}; } on(name, callback) { this.handlers[name] = callback; } addControl() {} setZoomAndCenter(...args) { locationUpdates.push(args); } setMapStyle() {} }, ToolBar: class {}, Scale: class {}, Pixel: class {}, InfoWindow: class { setContent(card) { this.card = card; } open() {} close() {} } } });
+  const context = vm.createContext({ document: doc, window: { NAV_CONFIG: { ...navConfig }, RouteOptimizer: require('../route-optimizer.js'), addEventListener(name, callback) { (pageHandlers[name] ||= []).push(callback); }, confirm: () => true }, sessionStorage: { getItem: (key) => sessionValues.get(key) ?? null, setItem(key, value) { sessionValues.set(key, value); storageWrites.push({ key, value }); } }, location: { reload() { reloads++; } }, localStorage: { getItem: key => localValues.get(key) ?? (key === 'xingtu-language' ? savedLanguage : null), setItem(key, value) { localValues.set(key, value); storageWrites.push({ key, value }); }, removeItem(key) { localValues.delete(key); } }, navigator: { clipboard: { writeText: async () => {} } }, URLSearchParams, setTimeout, clearTimeout, requestAnimationFrame: (callback) => setTimeout(callback, 0), cancelAnimationFrame: clearTimeout, AMap: { Driving: routeService('driving'), Transfer: routeService('transfer'), Walking: routeService('walking'), Riding: routeService('riding'), Geolocation: class { getCurrentPosition(callback) { geolocationPending.push(callback); } }, PlaceSearch: class { search(keyword, callback) { placePending.push({ keyword, callback }); } }, Map: class { constructor() { this.handlers = {}; } on(name, callback) { this.handlers[name] = callback; } addControl() {} setZoomAndCenter(...args) { locationUpdates.push(args); } setMapStyle() {} }, ToolBar: class {}, Scale: class {}, Pixel: class {}, InfoWindow: class { setContent(card) { this.card = card; } open() {} close() {} } } });
   context.window.AMap = context.AMap;
   context.recordLocation = (...args) => locationUpdates.push(args);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../i18n.js'), 'utf8'), context);
@@ -69,10 +77,104 @@ function fixture(savedLanguage = null, settings = {}) {
   context.AMap.Circle = class { setCenter() {} setRadius() {} setOptions() {} setMap() {} };
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
   if (!vm.runInContext('liveLocation', context)) vm.runInContext('initializeLiveLocation()', context);
-  if (initialPanel === 'custom') vm.runInContext("switchRoutePanel('custom', false); status(() => t('配置地图后，即可开始规划。'))", context);
-  return { elements, pending, placePending, searches, geolocationPending, locationUpdates, scripts, storageWrites, sessionValues, reloads: () => reloads, mode, modes: { custom: mode, current: currentRadio }, context, run: (code) => vm.runInContext(code, context), clears: () => clears };
+  if (initialPanel === 'custom' && !localValues.has('xingtu-usage')) vm.runInContext("switchRoutePanel('custom', false); status(() => t('配置地图后，即可开始规划。'))", context);
+  return { elements, pending, placePending, searches, geolocationPending, locationUpdates, scripts, storageWrites, sessionValues, localValues, pageHandlers, reloads: () => reloads, mode, modes: { custom: mode, current: currentRadio }, context, run: (code) => vm.runInContext(code, context), clears: () => clears };
 }
 const event = { preventDefault() {} };
+test('usage survives leaving and reopening with confirmed coordinates, stop order and both panels', () => {
+  const f = fixture();
+  f.elements.get('batch-addresses').value = '起点\n甲\n乙\n终点'; f.elements.get('batch-form').onsubmit(event);
+  f.run("addressIds().forEach((id, i) => { selected[id] = {name: $(id).value, address: '地址' + i, location: { getLng() { return 116 + i / 100; }, getLat() { return 39; } }}; }); moveStop('stop-2', 0)");
+  f.elements.get('city').value = '上海'; f.elements.get('tour-places').value = '甲\n乙';
+  f.elements.get('end-mode').value = 'free'; f.elements.get('objective').value = 'distance';
+  f.elements.get('current-destination').value = '目的地';
+  f.run("currentDestination = { name: '目的地', location: [121, 31] }; currentCityManual = true");
+  f.elements.get('current-city').value = '上海';
+  f.modes.current.value = 'transfer'; f.modes.custom.value = 'walking';
+  f.run("switchRoutePanel('current', false)");
+  f.pageHandlers.pagehide.forEach(callback => callback());
+  assert.equal(f.localValues.has('xingtu-usage'), true);
+  const reopened = fixture(null, { localValues: f.localValues, initialPanel: 'current' });
+  assert.equal(reopened.run('activeRoutePanel'), 'current');
+  assert.equal(reopened.elements.get('city').value, '上海');
+  assert.deepEqual(Array.from(reopened.run('addressIds().map(id => $(id).value)')), ['起点', '乙', '甲', '终点']);
+  assert.deepEqual(Array.from(reopened.run('selected[stops[0]].location')), [116.02, 39]);
+  assert.equal(reopened.elements.get('address-count').textContent, '4/4 已确认');
+  assert.equal(reopened.elements.get('tour-places').value, '甲\n乙');
+  assert.equal(reopened.elements.get('end-mode').value, 'free');
+  assert.equal(reopened.elements.get('objective').value, 'distance');
+  assert.equal(reopened.modes.current.value, 'transfer');
+  assert.equal(reopened.modes.custom.value, 'walking');
+  assert.equal(reopened.run('currentDestination.name'), '目的地');
+  assert.equal(reopened.run('livePosition'), null);
+  assert.equal(reopened.elements.get('current-plan').disabled, true);
+});
+test('a completed route restores its summary, road geometry and itinerary without another query', async () => {
+  const f = fixture(); f.elements.get('batch-addresses').value = '起点\n中间\n终点'; f.elements.get('batch-form').onsubmit(event);
+  f.run("loadedConfig = true; map = {}; addressIds().forEach((id, i) => selected[id] = {name: $(id).value, location: [116 + i / 100, 39]})");
+  const task = f.elements.get('route-form').onsubmit(event);
+  for (let i = 0; i < 3; i++) {
+    f.pending.shift()('complete', { routes: [{time: 120, distance: 1000, steps: [{ instruction: '沿道路前行', path: [[116, 39], [116.02, 39]] }]}] });
+    if (i < 2) await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  await task; f.pageHandlers.pagehide.forEach(callback => callback());
+  const reopened = fixture(null, { localValues: f.localValues });
+  assert.equal(reopened.elements.get('summary').hidden, false);
+  assert.equal(reopened.elements.get('duration').textContent, '2分钟');
+  assert.equal(reopened.elements.get('order-list').children.length, 3);
+  assert.equal(reopened.elements.get('saved-route-note').hidden, false);
+  assert.equal(reopened.run('lastRoute.paths[0].length'), 2);
+  assert.equal(reopened.elements.get('route-panel').children[0].children[0].textContent, '沿道路前行');
+  assert.equal(reopened.pending.length, 0);
+  reopened.elements.get('language-toggle').onclick();
+  assert.equal(reopened.elements.get('duration').textContent, '2 min');
+  assert.match(reopened.run('copiedItinerary'), /Recommended itinerary/);
+});
+test('manual clear cancels pending saves and keeps configuration, language and theme', () => {
+  const f = fixture(); f.elements.get('start').value = '未确认地址'; f.elements.get('start').handlers.input();
+  f.localValues.set('xingtu-config', 'personal settings'); f.localValues.set('xingtu-theme', 'dark'); f.localValues.set('xingtu-language', 'en');
+  f.run('saveUsage()'); const saved = f.localValues.get('xingtu-usage');
+  f.context.window.confirm = () => false; f.elements.get('clear-memory').onclick();
+  assert.equal(f.localValues.get('xingtu-usage'), saved);
+  f.context.window.confirm = () => true; f.elements.get('clear-memory').onclick();
+  f.pageHandlers.pagehide.forEach(callback => callback());
+  assert.equal(f.localValues.has('xingtu-usage'), false);
+  assert.equal(f.elements.get('start').value, '');
+  assert.equal(f.run('selected.start'), null);
+  assert.equal(f.localValues.get('xingtu-config'), 'personal settings');
+  assert.equal(f.localValues.get('xingtu-theme'), 'dark');
+  assert.equal(f.localValues.get('xingtu-language'), 'en');
+  f.elements.get('start').value = '新地址'; f.elements.get('start').handlers.input(); f.run('saveUsage()');
+  assert.equal(JSON.parse(f.localValues.get('xingtu-usage')).addresses[0].text, '新地址');
+});
+test('restores map view and labels a saved GPS start as a previous location', () => {
+  const f = fixture();
+  f.run("selected.start = { name: '我的位置', currentLocation: true, location: [121, 31] }; $('start').value = '我的位置'; map = { getCenter() { return {getLng() {return 121;}, getLat() {return 31;}}; }, getZoom() {return 16;} }; rememberUsage(); saveUsage()");
+  const reopened = fixture(null, {localValues: f.localValues});
+  assert.equal(reopened.run('savedMapView.zoom'), 16);
+  assert.deepEqual(Array.from(reopened.run('savedMapView.center')), [121, 31]);
+  assert.equal(reopened.elements.get('start').value, '上次定位位置');
+  assert.equal(reopened.run('livePosition'), null);
+});
+test('corrupt storage is reported and retained until the user clears it', () => {
+  for (const saved of ['{broken', JSON.stringify({version: 1, addresses: []}), JSON.stringify({version: 2})]) {
+    const localValues = new Map([['xingtu-usage', saved]]);
+    const f = fixture(null, {localValues, initialPanel: 'current'});
+    assert.equal(f.elements.get('start').value, '');
+    assert.match(f.elements.get('memory-status').textContent, /无法恢复/);
+    assert.equal(localValues.get('xingtu-usage'), saved);
+  }
+});
+test('unavailable storage leaves the form usable and reports that data could not be saved or cleared', () => {
+  const f = fixture(); f.elements.get('start').value = '保留在页面上的地址';
+  f.context.localStorage.setItem = () => { throw new Error('quota exceeded'); };
+  f.run('rememberUsage(); saveUsage()');
+  assert.match(f.elements.get('memory-status').textContent, /无法保存/);
+  f.context.localStorage.removeItem = () => { throw new Error('storage denied'); };
+  f.elements.get('clear-memory').onclick();
+  assert.equal(f.elements.get('start').value, '保留在页面上的地址');
+  assert.match(f.elements.get('memory-status').textContent, /无法清除/);
+});
 function searchFixture(panel) {
   const f = liveFixture(panel), queries = [], timers = new Map();
   f.elements.get((panel === 'current' ? 'current-destination' : 'start') + '-options').hidden = true;
@@ -980,6 +1082,65 @@ const dummyManagedMap = {
   managed: true, key: 'dummy-shared-key', serviceHost: 'https://shared.example/_AMapService', defaultCity: '北京'
 };
 const mapReady = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('opening a configured page automatically starts one location watch after map load', async () => {
+  const f = fixture(null, { navConfig: dummyManagedMap, initialPanel: 'current' });
+  assert.equal(f.geolocationPending.length, 0);
+  await mapReady();
+  assert.equal(f.geolocationPending.length, 1);
+  assert.match(f.elements.get('live-position-status').textContent, /正在获取位置/);
+  assert.equal(f.elements.get('live-direction').attributes['aria-pressed'], 'false');
+  f.elements.get('current-locate').onclick();
+  assert.equal(f.geolocationPending.length, 1);
+  f.geolocationPending[0]('complete', { position: '116.4,39.9' });
+  assert.equal(f.elements.get('current-plan').disabled, false);
+  assert.equal(f.elements.get('start').value, '');
+  assert.deepEqual(f.locationUpdates.map(([zoom, position]) => [zoom, Array.from(position)]), [[16, [116.4, 39.9]]]);
+  f.elements.get('live-toggle').onclick();
+  assert.equal(f.run('liveState.enabled'), false);
+});
+
+test('automatic location denial leaves saved fields usable and supports a manual retry', async () => {
+  const f = fixture(null, { navConfig: dummyManagedMap, initialPanel: 'current' });
+  await mapReady();
+  f.elements.get('current-destination').value = '保留目的地';
+  f.geolocationPending[0]('error', { info: 'PERMISSION_DENIED' });
+  assert.match(f.elements.get('live-position-status').textContent, /定位权限被拒绝/);
+  assert.equal(f.elements.get('current-destination').value, '保留目的地');
+  assert.equal(f.elements.get('current-plan').disabled, true);
+  assert.equal(f.geolocationPending.length, 1);
+  f.elements.get('current-locate').onclick();
+  assert.equal(f.geolocationPending.length, 2);
+  f.geolocationPending[1]('complete', { position: '116.4,39.9' });
+  assert.equal(f.elements.get('current-plan').disabled, false);
+});
+
+test('automatic location preserves a restored viewport, custom start and current destination', async () => {
+  const previous = fixture();
+  previous.elements.get('start').value = '原出发地点';
+  previous.elements.get('current-destination').value = '原目的地';
+  previous.run("selected.start = {name: '原出发地点', location: [121, 31]}; currentDestination = {name: '原目的地', location: [121.1, 31.1]}; map = {getCenter() {return [121, 31];}, getZoom() {return 14;}}; rememberUsage(); saveUsage()");
+  const reopened = fixture(null, { navConfig: dummyManagedMap, localValues: previous.localValues });
+  await mapReady();
+  assert.equal(reopened.geolocationPending.length, 1);
+  reopened.geolocationPending[0]('complete', { position: '116.4,39.9' });
+  assert.equal(reopened.elements.get('start').value, '原出发地点');
+  assert.equal(reopened.elements.get('current-destination').value, '原目的地');
+  assert.deepEqual(Array.from(reopened.run('selected.start.location')), [121, 31]);
+  assert.equal(reopened.locationUpdates.length, 0);
+  assert.equal(reopened.pending.length, 0);
+  assert.equal(reopened.run('livePosition.location[0]'), 116.4);
+});
+
+test('no map configuration or insecure context leaves automatic location inactive', async () => {
+  const unconfigured = fixture();
+  const insecure = fixture(null, { navConfig: dummyManagedMap });
+  insecure.context.window.LOCATION_TEST_ENV.isSecureContext = false;
+  await mapReady();
+  assert.equal(unconfigured.geolocationPending.length, 0);
+  assert.equal(insecure.geolocationPending.length, 0);
+  assert.match(insecure.elements.get('live-position-status').textContent, /HTTPS/);
+});
 
 test('managed map keeps personal settings available without prefilling shared credentials', async () => {
   const f = fixture(null, { navConfig: dummyManagedMap }); await mapReady();
