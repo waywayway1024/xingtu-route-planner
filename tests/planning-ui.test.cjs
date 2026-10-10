@@ -210,13 +210,13 @@ test('switching during a query preserves it and completed itinerary can switch b
   assert.equal(f.elements.get('summary').hidden, false);
   assert.equal(f.elements.get('duration').textContent, '1 hr 2 min');
   assert.equal(f.elements.get('distance').textContent, '12.3 km');
-  assert.match(f.run('copiedItinerary'), /Xingtu · Recommended itinerary/);
+  assert.match(f.run('copiedItinerary'), /manmanhang · Recommended itinerary/);
   assert.match(f.run('copiedItinerary'), /地点0 \(详细地址0\)/);
   assert.match(f.elements.get('order-list').children[0].textContent, /Start · 地点0/);
   f.elements.get('language-toggle').onclick();
   assert.equal(f.elements.get('summary').hidden, false);
   assert.equal(f.elements.get('duration').textContent, '1小时2分钟');
-  assert.match(f.run('copiedItinerary'), /行途 · 推荐行程/);
+  assert.match(f.run('copiedItinerary'), /manmanhang · 推荐行程/);
   assert.equal(f.pending.length, 0);
   assert.equal(f.clears(), 0);
 });

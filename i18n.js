@@ -70,7 +70,6 @@ window.I18n = (() => {
   "方向已过期，等待传感器更新…": "Heading is outdated. Waiting for the sensor…",
   "页面在后台，方向已暂停": "Heading paused while the page is hidden",
   "箭头表示手机屏幕顶部朝向。请尽量平放手机，顶部指向面前。": "The arrow shows the top of your screen. Hold your phone flat with the top facing forward.",
-  "行途": "Xingtu",
   "让每次出发都有方向": "Find your way on every journey",
   "地图设置": "Map settings",
   "填写你自己的「Web 端（JS API）」Key，保存后优先使用你的配置。配置仅保存在当前浏览器会话中。": "Enter your own Web (JS API) key. Your settings take priority after saving and are stored only for this browser session.",
@@ -225,7 +224,7 @@ window.I18n = (() => {
   "耗时": "travel times",
   "距离": "distances",
   "选出最优顺序；完整路线以地图结果为准，实时路况可能变化。": ". Follow the full route on the map; live traffic may change.",
-  "行途 · 推荐行程\n": "Xingtu · Recommended itinerary\n",
+  "manmanhang · 推荐行程\n": "manmanhang · Recommended itinerary\n",
   "（": " (",
   "）": ")",
   "\n预计 ": "\nEstimated ",
@@ -268,7 +267,7 @@ window.I18n = (() => {
   }
   function apply() {
     document.documentElement.lang = language === 'en' ? 'en' : 'zh-CN';
-    document.title = language === 'en' ? 'Xingtu · Route planning' : '行途 · 路线规划';
+    document.title = language === 'en' ? 'manmanhang · Route planning' : 'manmanhang · 路线规划';
     translatePage();
     const button = document.getElementById('language-toggle');
     button.textContent = language === 'en' ? '中文' : 'English';

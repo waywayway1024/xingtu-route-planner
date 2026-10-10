@@ -1,6 +1,6 @@
 # 香港 / Linux 服务器部署
 
-将行途部署到自己的 Ubuntu / Debian 服务器，使用 Node.js、Nginx 和 systemd。服务器可位于香港，网站业务源码与仓库根目录一致。
+将manmanhang部署到自己的 Ubuntu / Debian 服务器，使用 Node.js、Nginx 和 systemd。服务器可位于香港，网站业务源码与仓库根目录一致。
 
 ## 下载版与在线分享版
 

@@ -797,7 +797,7 @@ async function planRoute(event, fromCurrent = false) {
       writeText('optimization-note', () => comparison + t(' 按本次道路查询的分段') + (objective === 'time' ? t('耗时') : t('距离')) + t('选出最优顺序；完整路线以地图结果为准，实时路况可能变化。'));
       $('visit-order').hidden = false;
       recommendedPoints = points.slice();
-      copiedItinerary = t('行途 · 推荐行程\n') + points.map((point, i) => (i + 1) + '. ' + pointName(point) + (typeof point.address === 'string' && point.address ? t('（') + point.address + t('）') : '')).join('\n') + t('\n预计 ') + $('duration').textContent + ' · ' + $('distance').textContent + '\n' + comparison + t('\n预计耗时仅供参考，请以实际路况为准。');
+      copiedItinerary = t('manmanhang · 推荐行程\n') + points.map((point, i) => (i + 1) + '. ' + pointName(point) + (typeof point.address === 'string' && point.address ? t('（') + point.address + t('）') : '')).join('\n') + t('\n预计 ') + $('duration').textContent + ' · ' + $('distance').textContent + '\n' + comparison + t('\n预计耗时仅供参考，请以实际路况为准。');
     }
       };
       renderOrder();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#176b53">
-  <title>行途 · 路线规划</title>
+  <title>manmanhang · 路线规划</title>
   <script>
     // Apply the saved theme before painting, with a system preference fallback.
     try { document.documentElement.dataset.theme = localStorage.getItem('xingtu-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
@@ -19,7 +19,7 @@
 </head>
 <body>
   <header class="header">
-    <a class="brand" href="./"><span class="brand-icon">↗</span><span>行途<small>让每次出发都有方向</small></span></a>
+    <a class="brand" href="./"><span class="brand-icon">↗</span><span>manmanhang<small>让每次出发都有方向</small></span></a>
     <div class="header-actions"><button id="language-toggle" data-dynamic class="button secondary" type="button">English</button><button id="theme-toggle" data-dynamic class="button secondary" type="button" aria-pressed="false">☾ 黑夜模式</button><button id="settings" class="button secondary">地图设置</button></div>
   </header>
   <main class="workspace">
@@ -83,7 +83,7 @@
     <section class="map-area" aria-label="地图">
       <div id="map"></div>
       <div id="map-placeholder" class="map-placeholder"><div class="empty-card"><span class="empty-icon">↗</span><h2>每一段旅程，从这里开始</h2><p id="map-message" data-dynamic>连接高德地图，查看你的路线。</p><button id="connect" class="button primary">配置高德地图</button><small>支持中国国内路线规划</small></div></div>
-      <div class="map-badge">行途 <span>·</span> 路线规划</div>
+      <div class="map-badge">manmanhang <span>·</span> 路线规划</div>
       <section id="live-controls" class="live-controls" hidden aria-label="实时位置与方向">
         <div class="live-actions"><button id="live-toggle" type="button" aria-pressed="false">◎ 定位我</button><button id="live-recenter" type="button" disabled>回到位置</button><button id="live-direction" type="button" aria-pressed="false" disabled>开启方向</button></div>
         <p id="live-position-status" data-dynamic role="status">定位尚未开启</p><p id="live-direction-status" data-dynamic role="status">方向尚未开启</p>
