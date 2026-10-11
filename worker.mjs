@@ -55,6 +55,7 @@ export default {
     }
     const asset = assets[url.pathname === '/' ? '/index.html' : url.pathname];
     if (!asset) return new Response('Not found', { status: 404 });
-    return new Response(request.method === 'HEAD' ? null : asset.content, { headers: { ...responseHeaders, 'Content-Type': asset.type, 'Cache-Control': 'no-cache' } });
+    const body = asset.binary ? Uint8Array.from(atob(asset.content), character => character.charCodeAt(0)) : asset.content;
+    return new Response(request.method === 'HEAD' ? null : body, { headers: { ...responseHeaders, 'Content-Type': asset.type, 'Cache-Control': url.pathname === '/app-version.json' ? 'no-store' : 'no-cache' } });
   },
 };

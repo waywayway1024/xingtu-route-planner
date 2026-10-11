@@ -244,7 +244,12 @@ window.I18n = (() => {
   "找到 ": "Found ",
   " 个方案，可在下方查看路线详情。": " options. View route details below.",
   "规划失败，请稍后重试。": "Planning failed. Please try again later.",
-  "计算已取消，可以重新规划。": "Planning cancelled. You can start again."
+  "计算已取消，可以重新规划。": "Planning cancelled. You can start again.",
+  "有新版本，更新后即可使用。": "A new version is available.",
+  "点击更新": "Update now",
+  "正在更新…": "Updating…",
+  "有新版本，请联网后更新。": "A new version is available. Connect to the internet to update.",
+  "暂时无法更新，请稍后重试。": "Update unavailable. Please try again later."
 };
   let language = 'zh';
   try { if (localStorage.getItem('xingtu-language') === 'en') language = 'en'; } catch { /* Storage is optional. */ }

@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import worker from '../dist/server/index.js';
 const base = 'https://route.example.com';
 const env = { AMAP_JS_KEY: 'test-key', AMAP_SECURITY_CODE: 'test-secret' };
+
+test('PWA version, manifest and PNG icons are published with correct response headers', async () => {
+  const response = await worker.fetch(new Request(base + '/app-version.json'), env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  const { version } = await response.json();
+  assert.match(version, /^[a-f0-9]{16}$/);
+  const page = await (await worker.fetch(new Request(base), env)).text();
+  assert.match(page, new RegExp('name="app-version" content="' + version + '"'));
+  assert.match(page, /pwa.js/);
+  const manifest = await worker.fetch(new Request(base + '/manifest.webmanifest'), env);
+  assert.match(manifest.headers.get('Content-Type'), /^application\/manifest\+json/);
+  assert.equal((await manifest.json()).display, 'standalone');
+  for (const size of [192, 512]) {
+    const icon = await worker.fetch(new Request(base + '/icon-' + size + '.png'), env);
+    assert.equal(icon.headers.get('Content-Type'), 'image/png');
+    const bytes = Buffer.from(await icon.arrayBuffer());
+    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+    assert.equal(bytes.readUInt32BE(16), size);
+    assert.equal((await worker.fetch(new Request(base + '/icon-' + size + '.png', { method: 'HEAD' }), env)).body, null);
+  }
+  assert.equal((await worker.fetch(new Request(base + '/public-assets.cjs'), env)).status, 404);
+});
 test('public configuration exposes the JS key but never the security secret', async () => {
   const response = await worker.fetch(new Request(base + '/site-config.js'), env);
   const text = await response.text();
