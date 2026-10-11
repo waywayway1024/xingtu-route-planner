@@ -1,5 +1,23 @@
 'use strict';
 (function () {
+  const touchScreen = window.matchMedia('(pointer: coarse)');
+  if (touchScreen.matches) {
+    document.querySelector('meta[name="viewport"]').content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+  }
+  function isMap(target) {
+    return !!target?.closest?.('#map') && !target.closest('.map-place-card');
+  }
+  function preventPageZoom(event) {
+    if (!touchScreen.matches) return;
+    const outsideMap = event.touches
+      ? event.touches.length > 1 && !Array.from(event.touches).every(touch => isMap(touch.target))
+      : !isMap(event.target);
+    if (outsideMap) event.preventDefault();
+  }
+  // Safari may ignore viewport limits; leave the map SDK's own gestures intact.
+  for (const type of ['touchstart', 'touchmove', 'gesturestart', 'gesturechange', 'dblclick']) {
+    document.addEventListener(type, preventPageZoom, { passive: false });
+  }
   const version = document.querySelector('meta[name="app-version"]')?.content;
   if (!version || version === '__APP_VERSION__') return;
   const banner = document.getElementById('app-update');

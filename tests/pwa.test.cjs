@@ -9,14 +9,16 @@ const { files, createAssets } = require('../public-assets.cjs');
 const source = fs.readFileSync(path.join(__dirname, '../pwa.js'), 'utf8');
 const current = '1111111111111111', latest = '2222222222222222';
 const settle = () => new Promise(resolve => setImmediate(resolve));
-function browser() {
+function browser({ coarse = false, version = current } = {}) {
   const elements = { 'app-update': { hidden: true }, 'app-update-message': {}, 'app-update-button': {}, destination: { value: '颐和园' } };
-  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: () => ({ content: current }), getElementById: id => elements[id] });
+  const viewport = { content: 'width=device-width, initial-scale=1' };
+  const document = Object.assign(new EventTarget(), { hidden: false, querySelector: selector => selector === 'meta[name="viewport"]' ? viewport : { content: version }, getElementById: id => elements[id] });
   const navigator = { onLine: true };
   const calls = [], intervals = [], timers = new Map();
   const state = { version: current, fail: false, reloads: 0, language: 'zh' };
   let languageChanged;
   const window = Object.assign(new EventTarget(), {
+    matchMedia: () => ({ matches: coarse }),
     location: { reload() { state.reloads++; } },
     I18n: { t: text => state.language === 'zh' ? text : 'en:' + text, onChange(fn) { languageChanged = fn; } }
   });
@@ -32,8 +34,54 @@ function browser() {
     }
   };
   vm.runInNewContext(source, context);
-  return { elements, document, navigator, window, state, calls, intervals, timers, translate() { languageChanged(); } };
+  return { elements, document, navigator, window, state, calls, intervals, timers, viewport, translate() { languageChanged(); } };
 }
+
+function zoomEvent(page, type, target, touches) {
+  const event = new Event(type, { cancelable: true });
+  Object.defineProperty(event, 'target', { value: target });
+  if (touches) Object.defineProperty(event, 'touches', { value: touches.map(target => ({ target })) });
+  page.document.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+const outside = { closest: () => null };
+const mapSurface = { closest: selector => selector === '#map' ? {} : null };
+const mapCard = { closest: () => ({}) };
+
+test('phone page zoom is blocked without cancelling single-finger scrolling or taps', () => {
+  const page = browser({ coarse: true });
+  assert.match(page.viewport.content, /maximum-scale=1, user-scalable=no/);
+  for (const type of ['touchstart', 'touchmove']) {
+    assert.equal(zoomEvent(page, type, outside, [outside]), false);
+    assert.equal(zoomEvent(page, type, outside, [outside, outside]), true);
+  }
+  for (const type of ['gesturestart', 'gesturechange', 'dblclick']) assert.equal(zoomEvent(page, type, outside), true);
+  assert.equal(zoomEvent(page, 'click', outside), false);
+  assert.equal(zoomEvent(page, 'touchend', outside, []), false);
+});
+
+test('map gestures remain available, while map cards and touches spanning the form are locked', () => {
+  const page = browser({ coarse: true });
+  for (const type of ['touchstart', 'touchmove']) {
+    assert.equal(zoomEvent(page, type, mapSurface, [mapSurface, mapSurface]), false);
+    assert.equal(zoomEvent(page, type, mapSurface, [mapSurface, outside]), true);
+    assert.equal(zoomEvent(page, type, mapCard, [mapCard, mapCard]), true);
+  }
+  for (const type of ['gesturestart', 'gesturechange', 'dblclick']) {
+    assert.equal(zoomEvent(page, type, mapSurface), false);
+    assert.equal(zoomEvent(page, type, mapCard), true);
+  }
+});
+
+test('desktop browser zoom is unchanged and phone restrictions do not depend on update metadata', () => {
+  const desktop = browser();
+  assert.equal(desktop.viewport.content, 'width=device-width, initial-scale=1');
+  for (const type of ['gesturestart', 'gesturechange', 'dblclick']) assert.equal(zoomEvent(desktop, type, outside), false);
+  assert.equal(zoomEvent(desktop, 'touchmove', outside, [outside, outside]), false);
+  const phone = browser({ coarse: true, version: '__APP_VERSION__' });
+  assert.equal(zoomEvent(phone, 'gesturestart', outside), true);
+  assert.equal(phone.calls.length, 0);
+});
 
 test('startup checks the server without caching or refreshing the current page', async () => {
   const page = browser(); await settle();
