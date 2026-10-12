@@ -16,6 +16,16 @@
     catch { document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
   </script>
   <link rel="stylesheet" href="styles.css">
+  <style id="launch-style">
+    .launch-active{overflow:hidden}
+    .launch-screen{position:fixed;inset:0;z-index:10000;overflow:hidden;background:#17231f;display:grid;place-items:center;animation:launch-white 1ms 1650ms forwards,launch-fade 700ms 1800ms forwards}
+    .launch-m{width:clamp(96px,28vw,124px);height:auto;fill:#f5f7f6;transform-origin:50% 90%;--launch-scale:500;animation:launch-zoom 1100ms cubic-bezier(.9,0,1,.15) 550ms both,launch-hide 1ms 1650ms forwards}
+    @keyframes launch-zoom{from{transform:scale(1)}to{transform:scale(var(--launch-scale))}}
+    @keyframes launch-white{to{background:#f5f7f6}}
+    @keyframes launch-hide{to{visibility:hidden}}
+    @keyframes launch-fade{to{opacity:0;visibility:hidden;pointer-events:none}}
+    @media(prefers-reduced-motion:reduce){.launch-screen{animation:launch-fade 250ms 100ms forwards}.launch-m{animation:none}}
+  </style>
   <script src="config.js" defer></script>
   <script src="route-optimizer.js" defer></script>
   <script src="i18n.js" defer></script>
@@ -24,6 +34,40 @@
   <script src="pwa.js" defer></script>
 </head>
 <body>
+  <div id="launch-screen" class="launch-screen" aria-hidden="true">
+    <svg id="launch-m" class="launch-m" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M0 0H16L50 80L84 0H100V100H86V26L57 100H43L14 26V100H0Z"/></svg>
+  </div>
+  <script id="launch-script">
+    (() => {
+      const screen = document.getElementById('launch-screen');
+      const logo = document.getElementById('launch-m');
+      const size = logo.getBoundingClientRect().width;
+      logo.style.setProperty('--launch-scale', Math.ceil(Math.hypot(innerWidth, innerHeight) / (size * .04)));
+      const blocked = [];
+      document.documentElement.classList.add('launch-active');
+      document.body.setAttribute('aria-busy', 'true');
+      const finish = () => {
+        screen.remove();
+        blocked.forEach(element => { element.inert = false; });
+        document.body.removeAttribute('aria-busy');
+        document.documentElement.classList.remove('launch-active');
+        clearTimeout(fallback);
+      };
+      document.addEventListener('DOMContentLoaded', () => {
+        if (!screen.isConnected) return;
+        for (const element of document.body.children) {
+          if (element !== screen && element.tagName !== 'SCRIPT' && !element.inert) {
+            element.inert = true;
+            blocked.push(element);
+          }
+        }
+      }, { once: true });
+      screen.addEventListener('animationend', event => {
+        if (event.target === screen && event.animationName === 'launch-fade') finish();
+      });
+      const fallback = setTimeout(finish, 2900);
+    })();
+  </script>
   <section id="app-update" class="app-update" data-dynamic role="status" aria-live="polite" hidden><span id="app-update-message">有新版本，更新后即可使用。</span><button id="app-update-button" type="button" class="button primary">点击更新</button></section>
   <header class="header">
     <a class="brand" href="./"><span class="brand-icon">↗</span><span>manmanhang<small>让每次出发都有方向</small></span></a>
