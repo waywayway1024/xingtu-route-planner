@@ -2,30 +2,41 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#176b53">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
   <meta name="app-version" content="__APP_VERSION__">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="manmanhang">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="apple-touch-startup-image" href="/startup-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+  <link rel="apple-touch-startup-image" href="/startup-2622x1206.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)">
   <title>manmanhang · 路线规划</title>
   <script>
     // Apply the saved theme before painting, with a system preference fallback.
     try { document.documentElement.dataset.theme = localStorage.getItem('xingtu-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
     catch { document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+    document.documentElement.classList.add('launch-active');
+    document.documentElement.classList.add('launch-first-frame');
+    document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#15231e' : '#ffffff';
   </script>
-  <link rel="stylesheet" href="styles.css">
   <style id="launch-style">
-    .launch-active{overflow:hidden}
-    .launch-screen{position:fixed;inset:0;z-index:10000;overflow:hidden;background:#17231f;display:grid;place-items:center;animation:launch-white 1ms 1650ms forwards,launch-fade 700ms 1800ms forwards}
-    .launch-m{width:clamp(96px,28vw,124px);height:auto;fill:#f5f7f6;transform-origin:50% 90%;--launch-scale:500;animation:launch-zoom 1100ms cubic-bezier(.9,0,1,.15) 550ms both,launch-hide 1ms 1650ms forwards}
+    html{--header-bg:#fff;color-scheme:light}html[data-theme=dark]{--header-bg:#15231e;color-scheme:dark}body{margin:0;background:var(--header-bg)}
+    html.launch-active,html.launch-active body{overflow:hidden}
+    html.launch-first-frame[data-theme],html.launch-first-frame[data-theme] body{background:#17231f}
+    .launch-screen{position:fixed;inset:0;z-index:10000;overflow:hidden;background:#17231f;display:grid;place-items:center;animation:launch-white 1ms 1650ms forwards,launch-fade 700ms 1800ms forwards;animation-play-state:paused}
+    .launch-m{width:clamp(96px,28vw,124px);height:auto;fill:#f5f7f6;transform-origin:50% 90%;--launch-scale:500;animation:launch-zoom 1100ms cubic-bezier(.9,0,1,.15) 550ms both,launch-hide 1ms 1650ms forwards;animation-play-state:paused}
+    .launch-playing .launch-screen,.launch-playing .launch-m{animation-play-state:running}
     @keyframes launch-zoom{from{transform:scale(1)}to{transform:scale(var(--launch-scale))}}
     @keyframes launch-white{to{background:#f5f7f6}}
     @keyframes launch-hide{to{visibility:hidden}}
     @keyframes launch-fade{to{opacity:0;visibility:hidden;pointer-events:none}}
-    @media(prefers-reduced-motion:reduce){.launch-screen{animation:launch-fade 250ms 100ms forwards}.launch-m{animation:none}}
+    @media(display-mode:standalone){body{padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}}
+    @media(prefers-reduced-motion:reduce){.launch-screen{animation-name:launch-fade;animation-duration:250ms;animation-delay:100ms}.launch-m{animation:none}}
   </style>
+  <link id="app-style" rel="stylesheet" href="styles.css" media="print" onload="this.media='all';this.onload=null;document.dispatchEvent(new Event('app-style-ready'))">
+  <noscript><link rel="stylesheet" href="styles.css"><style>.launch-screen{display:none}</style></noscript>
   <script src="config.js" defer></script>
   <script src="route-optimizer.js" defer></script>
   <script src="i18n.js" defer></script>
@@ -44,15 +55,47 @@
       const size = logo.getBoundingClientRect().width;
       logo.style.setProperty('--launch-scale', Math.ceil(Math.hypot(innerWidth, innerHeight) / (size * .04)));
       const blocked = [];
+      let ready = false, started = false, paintFrame = 0;
+      let fallback;
       document.documentElement.classList.add('launch-active');
+      document.documentElement.classList.add('launch-first-frame');
       document.body.setAttribute('aria-busy', 'true');
       const finish = () => {
         screen.remove();
         blocked.forEach(element => { element.inert = false; });
         document.body.removeAttribute('aria-busy');
         document.documentElement.classList.remove('launch-active');
+        document.documentElement.classList.remove('launch-playing');
+        document.documentElement.classList.remove('launch-first-frame');
+        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#15231e' : '#ffffff';
+        cancelAnimationFrame(paintFrame);
+        document.removeEventListener('visibilitychange', visibilityChanged);
+        document.removeEventListener('app-style-ready', start);
         clearTimeout(fallback);
       };
+      // Hold the first M while resources load; only start after visible paint opportunities.
+      const start = () => {
+        if (!ready || started || paintFrame || document.hidden || !screen.isConnected || document.getElementById('app-style').media !== 'all') return;
+        paintFrame = requestAnimationFrame(() => {
+          paintFrame = requestAnimationFrame(() => {
+            paintFrame = 0;
+            if (document.hidden || !screen.isConnected) return;
+            started = true;
+            document.documentElement.classList.add('launch-playing');
+            clearTimeout(fallback);
+            fallback = setTimeout(finish, 2900);
+          });
+        });
+      };
+      const visibilityChanged = () => {
+        if (!started) {
+          clearTimeout(fallback);
+          fallback = document.hidden ? 0 : setTimeout(finish, 10000);
+        }
+        start();
+      };
+      document.addEventListener('visibilitychange', visibilityChanged);
+      document.addEventListener('app-style-ready', start);
       document.addEventListener('DOMContentLoaded', () => {
         if (!screen.isConnected) return;
         for (const element of document.body.children) {
@@ -61,11 +104,17 @@
             blocked.push(element);
           }
         }
+        ready = true;
+        start();
       }, { once: true });
       screen.addEventListener('animationend', event => {
+        if (event.target === screen && event.animationName === 'launch-white') {
+          document.documentElement.classList.remove('launch-first-frame');
+          document.querySelector('meta[name="theme-color"]').content = '#f5f7f6';
+        }
         if (event.target === screen && event.animationName === 'launch-fade') finish();
       });
-      const fallback = setTimeout(finish, 2900);
+      if (!document.hidden) fallback = setTimeout(finish, 10000);
     })();
   </script>
   <section id="app-update" class="app-update" data-dynamic role="status" aria-live="polite" hidden><span id="app-update-message">有新版本，更新后即可使用。</span><button id="app-update-button" type="button" class="button primary">点击更新</button></section>

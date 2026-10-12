@@ -2,7 +2,7 @@
 (function () {
   const touchScreen = window.matchMedia('(pointer: coarse)');
   if (touchScreen.matches) {
-    document.querySelector('meta[name="viewport"]').content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    document.querySelector('meta[name="viewport"]').content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
   }
   function isMap(target) {
     return !!target?.closest?.('#map') && !target.closest('.map-place-card');

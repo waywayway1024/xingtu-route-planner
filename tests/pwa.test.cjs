@@ -51,6 +51,7 @@ const mapCard = { closest: () => ({}) };
 test('phone page zoom is blocked without cancelling single-finger scrolling or taps', () => {
   const page = browser({ coarse: true });
   assert.match(page.viewport.content, /maximum-scale=1, user-scalable=no/);
+  assert.match(page.viewport.content, /viewport-fit=cover/);
   for (const type of ['touchstart', 'touchmove']) {
     assert.equal(zoomEvent(page, type, outside, [outside]), false);
     assert.equal(zoomEvent(page, type, outside, [outside, outside]), true);
@@ -195,5 +196,22 @@ test('build metadata agrees with the page and only shipped UI changes alter the 
   } finally {
     assert.equal(path.dirname(path.resolve(temp)), tempBase);
     fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('iPhone 16 Pro startup images are published as dimension-matched PNGs', () => {
+  const assets=createAssets(true);
+  const html=assets['/index.html'].content;
+  assert.match(html,/apple-mobile-web-app-status-bar-style" content="black-translucent/);
+  assert.equal(JSON.parse(assets['/manifest.webmanifest'].content).background_color,'#17231f');
+  for (const [width,height] of [[1206,2622],[2622,1206]]) {
+    const image=assets['/startup-'+width+'x'+height+'.png'];
+    assert.equal(image.type,'image/png');
+    assert.equal(image.binary,true);
+    const png=Buffer.from(image.content,'base64');
+    assert.equal(png.subarray(1,4).toString(),'PNG');
+    assert.equal(png.readUInt32BE(16),width);
+    assert.equal(png.readUInt32BE(20),height);
+    assert.ok(html.includes('href="/startup-'+width+'x'+height+'.png"'));
   }
 });

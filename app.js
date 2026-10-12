@@ -237,7 +237,7 @@ function syncThemeButton() {
   const dark = document.documentElement.dataset.theme === 'dark';
   writeText('theme-toggle', () => dark ? t('☀ 日间模式') : t('☾ 黑夜模式'));
   $('theme-toggle').setAttribute('aria-pressed', String(dark));
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#15231e' : '#176b53';
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#15231e' : '#ffffff';
 }
 function saveThemePreference() {
   clearTimeout(themePreferenceTimer); themePreferenceTimer = 0;
