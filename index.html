@@ -19,14 +19,14 @@
     catch { document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
     document.documentElement.classList.add('launch-active');
     document.documentElement.classList.add('launch-first-frame');
-    document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#15231e' : '#ffffff';
+    document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#172630' : '#ffffff';
   </script>
   <style id="launch-style">
-    html{--header-bg:#fff;color-scheme:light}html[data-theme=dark]{--header-bg:#15231e;color-scheme:dark}body{margin:0;background:var(--header-bg)}
+    html{--header-bg:#fff;color-scheme:light}html[data-theme=dark]{--header-bg:#172630;color-scheme:dark}body{margin:0;background:var(--header-bg)}
     html.launch-active,html.launch-active body{overflow:hidden}
-    html.launch-first-frame[data-theme],html.launch-first-frame[data-theme] body{background:#17231f}
-    .launch-screen{position:fixed;inset:0;z-index:10000;overflow:hidden;background:#17231f;display:grid;place-items:center;animation:launch-white 1ms 1650ms forwards,launch-fade 700ms 1800ms forwards;animation-play-state:paused}
-    .launch-m{width:clamp(96px,28vw,124px);height:auto;fill:#f5f7f6;transform-origin:50% 90%;--launch-scale:500;animation:launch-zoom 1100ms cubic-bezier(.9,0,1,.15) 550ms both,launch-hide 1ms 1650ms forwards;animation-play-state:paused}
+    html.launch-first-frame[data-theme],html.launch-first-frame[data-theme] body{background:#a1e6fd}
+    .launch-screen{position:fixed;inset:0;z-index:10000;overflow:hidden;background:#a1e6fd;display:grid;place-items:center;animation:launch-white 1ms 1650ms forwards,launch-fade 700ms 1800ms forwards;animation-play-state:paused}
+    .launch-m{width:clamp(96px,28vw,124px);height:auto;fill:#ffffff;transform-origin:50% 90%;--launch-scale:500;animation:launch-zoom 1100ms cubic-bezier(.9,0,1,.15) 550ms both,launch-hide 1ms 1650ms forwards;animation-play-state:paused}
     .launch-playing .launch-screen,.launch-playing .launch-m{animation-play-state:running}
     @keyframes launch-zoom{from{transform:scale(1)}to{transform:scale(var(--launch-scale))}}
     @keyframes launch-white{to{background:#f5f7f6}}
@@ -67,7 +67,7 @@
         document.documentElement.classList.remove('launch-active');
         document.documentElement.classList.remove('launch-playing');
         document.documentElement.classList.remove('launch-first-frame');
-        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#15231e' : '#ffffff';
+        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'dark' ? '#172630' : '#ffffff';
         cancelAnimationFrame(paintFrame);
         document.removeEventListener('visibilitychange', visibilityChanged);
         document.removeEventListener('app-style-ready', start);

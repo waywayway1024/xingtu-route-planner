@@ -203,7 +203,7 @@ test('iPhone 16 Pro startup images are published as dimension-matched PNGs', () 
   const assets=createAssets(true);
   const html=assets['/index.html'].content;
   assert.match(html,/apple-mobile-web-app-status-bar-style" content="black-translucent/);
-  assert.equal(JSON.parse(assets['/manifest.webmanifest'].content).background_color,'#17231f');
+  assert.equal(JSON.parse(assets['/manifest.webmanifest'].content).background_color,'#a1e6fd');
   for (const [width,height] of [[1206,2622],[2622,1206]]) {
     const image=assets['/startup-'+width+'x'+height+'.png'];
     assert.equal(image.type,'image/png');

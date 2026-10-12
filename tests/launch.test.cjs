@@ -12,7 +12,7 @@ function launch(width = 390, height = 844) {
   const main = { tagName: 'MAIN', inert: false }, alreadyBlocked = { tagName: 'SECTION', inert: true };
   const body = { children: [screen, main, alreadyBlocked], setAttribute() { this.busy = true; }, removeAttribute() { this.busy = false; } };
   const classes = new Set();
-  const chrome = {content:'#17231f'};
+  const chrome = {content:'#ffffff'};
   const appStyle = {media:'all'};
   const document = { body, hidden:false, documentElement: { dataset:{theme:'light'}, classList: { add: name => classes.add(name), remove: name => classes.delete(name) } }, querySelector: () => chrome, getElementById: id => id === 'launch-screen' ? screen : id === 'app-style' ? appStyle : logo, addEventListener(type, fn) { events[type] = fn; }, removeEventListener(type) { delete events[type]; } };
   vm.runInNewContext(source, { document, innerWidth: width, innerHeight: height, requestAnimationFrame(fn) { const id=Symbol(); frames.set(id,fn); return id; }, cancelAnimationFrame(id) { frames.delete(id); }, setTimeout(fn, delay) { timers.set(delay, fn); return delay; }, clearTimeout(delay) { timers.delete(delay); } });
@@ -90,7 +90,7 @@ test('cleanup restores chrome to the current header theme and cancels pending pa
   page.document.documentElement.dataset.theme='dark';
   page.timers.values().next().value();
   assert.equal(page.frames.size,0);
-  assert.equal(page.chrome.content,'#15231e');
+  assert.equal(page.chrome.content,'#172630');
 });
 
 test('late main CSS holds M even when the remaining page scripts are ready', () => {
