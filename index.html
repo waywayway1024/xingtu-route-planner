@@ -187,11 +187,11 @@
       <div id="map"></div>
       <div id="map-placeholder" class="map-placeholder"><div class="empty-card"><span class="empty-icon">↗</span><h2>每一段旅程，从这里开始</h2><p id="map-message" data-dynamic>连接高德地图，查看你的路线。</p><button id="connect" class="button primary">配置高德地图</button><small>支持中国国内路线规划</small></div></div>
       <div class="map-badge">manmanhang <span>·</span> 路线规划</div>
-      <section id="live-controls" class="live-controls" hidden aria-label="实时位置与方向">
-        <div class="live-actions"><button id="live-toggle" type="button" aria-pressed="false">◎ 定位我</button><button id="live-recenter" type="button" disabled>回到位置</button><button id="live-direction" type="button" aria-pressed="false" disabled>开启方向</button></div>
-        <p id="live-position-status" data-dynamic role="status">定位尚未开启</p><p id="live-direction-status" data-dynamic role="status">方向尚未开启</p>
-        <small>箭头表示手机屏幕顶部朝向。请尽量平放手机，顶部指向面前。</small>
-      </section>
+      <details id="live-controls" class="live-controls" hidden>
+        <summary class="live-summary" aria-label="实时位置与方向"><span class="live-summary-icon" aria-hidden="true">◎</span><span id="live-accuracy" data-dynamic role="status">精度 —</span><span class="live-chevron" aria-hidden="true">⌄</span></summary>
+        <div class="live-actions"><button id="live-toggle" type="button" aria-describedby="live-position-status live-direction-status">◎ 定位我</button><button id="live-recenter" type="button" disabled>回到位置</button></div>
+        <p id="live-position-status" class="sr-only" data-dynamic role="status">定位尚未开启</p><p id="live-direction-status" class="sr-only" data-dynamic role="status">方向尚未开启</p>
+      </details>
     </section>
   </main>
   <dialog id="batch-dialog"><form id="batch-form"><div class="dialog-title"><h2>批量输入地址</h2><button id="close-batch" type="button" class="icon-button" aria-label="关闭">×</button></div><p>每行一个地址，共 2–8 个。依次填入地址栏，起终点按当前安排选项确定；导入后，请逐个选择候选地点确认位置。</p><label for="batch-addresses">地址列表</label><textarea id="batch-addresses" rows="8" required placeholder="北京南站&#10;天坛公园&#10;颐和园"></textarea><p class="hint">将替换当前地址列表，现有路线也会清除。</p><p id="batch-error" data-dynamic role="alert"></p><button type="submit" class="button primary">导入并确认地址</button></form></dialog>

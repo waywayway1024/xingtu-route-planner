@@ -1072,7 +1072,7 @@ test('opening a configured page automatically starts one location watch after ma
   await mapReady();
   assert.equal(f.geolocationPending.length, 1);
   assert.match(f.elements.get('live-position-status').textContent, /正在获取位置/);
-  assert.equal(f.elements.get('live-direction').attributes['aria-pressed'], 'false');
+  assert.equal(f.elements.has('live-direction'), false);
   f.elements.get('current-locate').onclick();
   assert.equal(f.geolocationPending.length, 1);
   f.geolocationPending[0]('complete', { position: '116.4,39.9' });
@@ -1080,7 +1080,10 @@ test('opening a configured page automatically starts one location watch after ma
   assert.equal(f.elements.get('start').value, '');
   assert.deepEqual(f.locationUpdates.map(([zoom, position]) => [zoom, Array.from(position)]), [[16, [116.4, 39.9]]]);
   f.elements.get('live-toggle').onclick();
-  assert.equal(f.run('liveState.enabled'), false);
+  assert.equal(f.run('liveState.enabled'), true);
+  assert.equal(f.geolocationPending.length, 1);
+  assert.equal(f.elements.get('live-toggle').textContent, '◎ 定位我');
+  assert.equal(f.elements.get('live-accuracy').textContent, '精度约 12 米');
 });
 
 test('automatic location denial leaves saved fields usable and supports a manual retry', async () => {
@@ -1243,7 +1246,7 @@ test('a delayed location cannot overwrite a manually changed start', () => {
 test('a heading received before GPS appears on the first marker and stop removes both overlays', () => {
   const f = liveFixture(); Object.assign(f.state, { directionState: 'active', directionEnabled: true, heading: 90 }); f.emitPosition();
   const arrow = f.markers[0].options.content.querySelector('.live-arrow'); assert.equal(arrow.hidden, false); assert.equal(arrow.style.transform, 'rotate(90deg)');
-  f.elements.get('live-toggle').onclick(); assert.equal(f.markers[0].options.map, null); assert.equal(f.circles[0].options.map, null); assert.equal(f.elements.get('live-recenter').disabled, true); assert.equal(f.elements.get('live-direction').disabled, true);
+  f.run('liveLocation.stop()'); assert.equal(f.markers[0].options.map, null); assert.equal(f.circles[0].options.map, null); assert.equal(f.elements.get('live-recenter').disabled, true);
 });
 test('location errors release the pending start and stale positions disable recenter', () => {
   const f = liveFixture(); f.elements.get('locate').onclick(); Object.assign(f.state, { positionState: 'error', positionError: 'denied' }); f.options().onState(f.state);
@@ -1252,7 +1255,7 @@ test('location errors release the pending start and stale positions disable rece
 });
 test('language switching preserves live location and direction while translating new controls', () => {
   const f = liveFixture(); Object.assign(f.state, { directionState: 'active', directionEnabled: true, heading: 90 }); f.emitPosition();
-  f.context.window.I18n.setLanguage('en'); assert.equal(f.elements.get('live-toggle').textContent, 'Stop location'); assert.match(f.elements.get('live-position-status').textContent, /Accuracy about 12/); assert.match(f.elements.get('live-direction-status').textContent, /Heading enabled/); assert.equal(f.markers.length, 1); assert.equal(f.stops(), 0);
+  f.context.window.I18n.setLanguage('en'); assert.equal(f.elements.get('live-toggle').textContent, '◎ Locate me'); assert.match(f.elements.get('live-accuracy').textContent, /Accuracy about 12/); assert.match(f.elements.get('live-direction-status').textContent, /Heading enabled/); assert.equal(f.markers.length, 1); assert.equal(f.stops(), 0);
 });
 
 function confirmCurrentDestination(f) {
@@ -1356,7 +1359,7 @@ test('expired, denied and stopped locations prevent a current route query', asyn
   await f.elements.get('current-route-form').onsubmit(event);
   assert.equal(f.searches.length, 0);
   assert.match(f.elements.get('current-origin-status').textContent, /定位权限被拒绝/);
-  f.emitPosition(); f.elements.get('live-toggle').onclick();
+  f.emitPosition(); f.run('liveLocation.stop()');
   assert.equal(f.elements.get('current-plan').disabled, true);
 });
 test('typing a destination is insufficient until a candidate is confirmed', async () => {

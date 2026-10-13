@@ -35,6 +35,34 @@ test('requires secure context and browser geolocation without using IP fallback'
   const insecure = fixture({ secure: false }); insecure.controller.start(); assert.equal(insecure.state().positionError, 'insecure'); assert.equal(insecure.calls.length, 0);
   const unsupported = fixture({ geo: false }); unsupported.controller.start(); assert.equal(unsupported.state().positionError, 'unsupported');
 });
+
+test('starting location automatically enables heading and repeated starts keep it enabled', () => {
+  const f = fixture(); f.controller.start();
+  assert.equal(f.state().directionEnabled, true);
+  assert.equal(f.environment.count('deviceorientation'), 1);
+  f.orientation({ webkitCompassHeading: 90 });
+  f.controller.start(); f.controller.start();
+  assert.equal(f.state().directionState, 'active');
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.environment.count('deviceorientation'), 1);
+});
+
+test('a startup permission requiring a gesture can be retried by locate without stopping GPS', async () => {
+  let gesture = false, requests = 0;
+  const f = fixture({ permission: () => {
+    requests++;
+    return gesture ? Promise.resolve('granted') : Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' }));
+  } });
+  f.controller.start(); await Promise.resolve();
+  assert.equal(f.state().directionState, 'permission');
+  assert.equal(f.state().watching, true);
+  gesture = true; f.controller.start();
+  assert.equal(requests, 2);
+  await Promise.resolve();
+  assert.equal(f.state().directionEnabled, true);
+  assert.equal(f.environment.count('deviceorientation'), 1);
+  assert.equal(f.calls.length, 1);
+});
 test('one continuous watch uses fresh high-accuracy samples and converted coordinates', () => {
   const f = fixture(); f.controller.start(); f.controller.start(); assert.equal(f.calls.length, 1);
   assert.deepEqual(f.calls[0].options, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
@@ -260,6 +288,7 @@ test('repeated rotation of expired compass data avoids duplicate state notificat
 });
 
 test('direction can be stopped and reenabled without duplicating listeners', async () => {
-  const f = fixture(); f.controller.start(); await f.controller.enableDirection(); await f.controller.enableDirection(); assert.equal(f.environment.count('deviceorientation'), 0);
+  const f = fixture(); f.controller.start(); await f.controller.enableDirection(); await f.controller.enableDirection(); assert.equal(f.environment.count('deviceorientation'), 1);
+  f.controller.stopDirection(); assert.equal(f.environment.count('deviceorientation'), 0);
   await f.controller.enableDirection(); assert.equal(f.environment.count('deviceorientation'), 1); assert.equal(f.state().watching, true);
 });

@@ -146,6 +146,7 @@
     function start() {
       if (enabled) {
         if (!doc?.hidden && ['error', 'stale'].includes(positionState)) { haltWatch(); beginWatch(); }
+        enableDirection();
         return;
       }
       if (env.isSecureContext === false || !geo?.watchPosition) {
@@ -153,6 +154,7 @@
       }
       enabled = true;
       if (doc?.hidden) { positionState = 'paused'; emit(); } else beginWatch();
+      enableDirection();
     }
     function orient(event, timestamp = now()) {
       if (!directionWanted || !watching) return;
@@ -193,19 +195,18 @@
       env.addEventListener('orientationchange', screenChanged); emit();
     }
     async function enableDirection() {
-      if (!enabled || !watching) return;
-      if (directionWanted) { stopDirection(); return; }
+      if (!enabled || !watching || directionWanted) return;
       if (!env.DeviceOrientationEvent) { directionState = 'unavailable'; emit(); return; }
       directionWanted = true; directionState = 'requesting'; const request = ++permissionVersion; emit();
       try {
-        // Called directly from the button gesture, before awaiting any GPS result.
+        // Startup reuses granted permission; a locate gesture can request it if needed.
         const permission = typeof env.DeviceOrientationEvent.requestPermission === 'function' ? await env.DeviceOrientationEvent.requestPermission(true) : 'granted';
         if (request !== permissionVersion || !enabled || !watching) return;
         if (permission !== 'granted') { directionWanted = false; directionState = 'denied'; emit(); return; }
         addDirectionListeners();
-      } catch {
+      } catch (error) {
         if (request !== permissionVersion) return;
-        directionWanted = false; directionState = 'denied'; emit();
+        directionWanted = false; directionState = error.name === 'NotAllowedError' ? 'permission' : 'denied'; emit();
       }
     }
     function suspend() {
@@ -214,7 +215,7 @@
       if (pending) directionWanted = false;
       positionState = 'paused'; directionState = directionWanted ? 'paused' : 'off'; emit();
     }
-    function resume() { if (enabled && !watching) { beginWatch(); if (directionWanted && watching) addDirectionListeners(); } }
+    function resume() { if (enabled && !watching) { beginWatch(); if (directionWanted && watching) addDirectionListeners(); else enableDirection(); } }
     function visibilityChanged() { if (doc.hidden) suspend(); else resume(); }
     doc?.addEventListener?.('visibilitychange', visibilityChanged);
     env.addEventListener('pagehide', suspend);
