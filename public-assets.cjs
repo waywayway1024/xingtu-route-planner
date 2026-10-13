@@ -4,6 +4,8 @@ const { createHash } = require('node:crypto');
 
 const files = { 'index.html': 'text/html', 'styles.css': 'text/css', 'app.js': 'text/javascript', 'i18n.js': 'text/javascript', 'live-location.js': 'text/javascript', 'route-optimizer.js': 'text/javascript', 'config.js': 'text/javascript', 'pwa.js': 'text/javascript', 'manifest.webmanifest': 'application/manifest+json', 'icon-192.png': 'image/png', 'icon-512.png': 'image/png' };
 files['startup-1206x2622.png'] = 'image/png';
+files['metro.js'] = 'text/javascript';
+files['metro-map.html'] = 'text/html';
 files['startup-2622x1206.png'] = 'image/png';
 
 function createAssets(hosted = false) {

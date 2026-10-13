@@ -41,6 +41,7 @@
   <script src="route-optimizer.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="live-location.js" defer></script>
+  <script src="metro.js" defer></script>
   <script src="app.js" defer></script>
   <script src="pwa.js" defer></script>
 </head>
@@ -126,15 +127,15 @@
     <aside class="sidebar">
       <div class="intro"><span class="eyebrow">YOUR NEXT JOURNEY</span><h1>想去的地方，一次安排</h1><p>输入地点，让程序帮你安排第一站到最后一站。</p></div>
       <div class="memory-controls"><p id="memory-status" data-dynamic role="status" aria-live="polite">使用数据自动保存在此浏览器，直到手动清除。</p><button id="clear-memory" type="button" class="text-button">清除使用数据</button></div>
+      <button id="open-metro" class="button secondary metro-entry" type="button">地铁线路与换乘 <span>↗</span></button>
       <div class="route-tabs" role="tablist" aria-label="选择路线方式"><button id="current-tab" type="button" role="tab" aria-controls="current-route-panel" aria-selected="true" tabindex="0">从当前位置出发</button><button id="custom-tab" type="button" role="tab" aria-controls="custom-route-panel" aria-selected="false" tabindex="-1">自定义路线</button></div>
       <section id="current-route-panel" role="tabpanel" aria-labelledby="current-tab">
         <p class="panel-intro">定位你的出发位置，只需选择目的地。</p>
         <div class="current-origin"><span class="current-origin-dot" aria-hidden="true"></span><div><strong>当前位置</strong><p id="current-origin-status" data-dynamic role="status">请先获取当前位置</p></div><button id="current-locate" class="text-button" type="button">获取位置</button></div>
         <form id="current-route-form">
           <div class="location-field current-destination-field"><label for="current-destination">目的地</label><input id="current-destination" placeholder="输入你想去的地址或地点" autocomplete="off" required aria-controls="current-destination-options"><div id="current-destination-options" class="suggestions" hidden></div><small id="current-destination-state" data-dynamic class="address-state">等待输入目的地</small></div>
-          <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="current-mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="current-mode" value="transfer"><span>公交</span></label><label><input type="radio" name="current-mode" value="walking"><span>步行</span></label><label><input type="radio" name="current-mode" value="riding"><span>骑行</span></label></fieldset>
+          <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="current-mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="current-mode" value="walking"><span>步行</span></label></fieldset>
           <div id="current-policy-field"><label for="current-policy">驾车偏好</label><select id="current-policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
-          <div id="current-city-field" hidden><label for="current-city">出发城市（公交）</label><input id="current-city" placeholder="规划时自动识别，也可手动填写" autocomplete="off"><small class="address-state">根据规划时的位置识别出发城市，不使用默认搜索城市。</small></div>
           <button id="current-plan" class="button primary" type="submit" disabled>规划路线 <span>→</span></button>
           <p class="panel-note">路线采用点击规划时的位置。移动后，可再次规划。</p>
         </form>
@@ -169,7 +170,7 @@
         </section>
         <button id="locate" type="button" class="text-button">◎ 使用我的位置作为起点</button>
         </details>
-        <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="mode" value="transfer"><span>公交</span></label><label><input type="radio" name="mode" value="walking"><span>步行</span></label><label><input type="radio" name="mode" value="riding"><span>骑行</span></label></fieldset>
+        <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="mode" value="walking"><span>步行</span></label></fieldset>
         <div id="policy-field"><label for="policy">驾车偏好</label><select id="policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
         <button id="plan" class="button primary" type="submit">规划路线 <span>→</span></button>
       </form>
@@ -205,6 +206,20 @@
       <a href="https://lbs.amap.com/" target="_blank" rel="noopener noreferrer">前往高德开放平台申请 ↗</a>
       <p id="config-error" data-dynamic role="alert"></p><button class="button primary" type="submit">保存并连接</button>
     </form>
+  </dialog>
+  <dialog id="metro-dialog" class="metro-dialog" aria-labelledby="metro-title">
+    <header class="metro-header"><div><span class="eyebrow">METRO</span><h2 id="metro-title">城市地铁</h2></div><button id="metro-close" type="button" class="metro-icon" aria-label="关闭地铁窗口">×</button></header>
+    <div class="metro-tools"><label for="metro-city" class="sr-only">地铁城市</label><select id="metro-city"><option value="" disabled selected>选择地铁城市</option></select><button id="metro-locate" class="button secondary" type="button">定位城市</button></div>
+    <div class="metro-endpoints"><label for="metro-start">起点<input id="metro-start" readonly placeholder="点击地铁站设置" data-dynamic></label><button id="metro-swap" class="metro-icon" type="button" aria-label="交换地铁起终点">⇄</button><label for="metro-end">终点<input id="metro-end" readonly placeholder="点击地铁站设置" data-dynamic></label></div>
+    <div class="metro-filters"><label for="metro-line" class="sr-only">地铁线路</label><select id="metro-line" disabled><option value="">全部线路</option></select><label for="metro-search" class="sr-only">搜索地铁站</label><input id="metro-search" type="search" placeholder="搜索地铁站" autocomplete="off" disabled>
+    <div id="metro-search-results" class="metro-search-results" data-dynamic hidden></div>
+    </div>
+    <p id="metro-status" data-dynamic class="metro-status" role="status" aria-live="polite">定位城市后查看地铁线路。</p>
+    <div class="metro-map-area"><div id="metro-map"><iframe id="metro-frame" src="metro-map.html" title="可缩放拖动的地铁线路图"></iframe></div><div class="metro-zoom"><button id="metro-zoom-in" class="metro-icon" type="button" aria-label="放大地铁图">＋</button><button id="metro-zoom-out" class="metro-icon" type="button" aria-label="缩小地铁图">−</button></div>
+    <section id="metro-station" class="metro-station" data-dynamic hidden><strong id="metro-station-name"></strong><p id="metro-station-lines"></p><div><button id="metro-set-start" class="button secondary" type="button">设为起点</button><button id="metro-set-end" class="button secondary" type="button">设为终点</button></div></section>
+    </div>
+    <section id="metro-result" class="metro-result" data-dynamic aria-live="polite" hidden></section>
+    <footer class="metro-footer"><button id="metro-plan" class="button primary" type="button" disabled>规划地铁路线</button><button id="metro-reset" class="text-button" type="button">清除选择</button><small>线路与换乘由高德提供，请以车站运营信息为准。</small></footer>
   </dialog>
 </body>
 </html>

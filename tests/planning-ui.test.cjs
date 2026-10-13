@@ -88,9 +88,8 @@ test('usage survives leaving and reopening with confirmed coordinates, stop orde
   f.elements.get('city').value = '上海'; f.elements.get('tour-places').value = '甲\n乙';
   f.elements.get('end-mode').value = 'free'; f.elements.get('objective').value = 'distance';
   f.elements.get('current-destination').value = '目的地';
-  f.run("currentDestination = { name: '目的地', location: [121, 31] }; currentCityManual = true");
-  f.elements.get('current-city').value = '上海';
-  f.modes.current.value = 'transfer'; f.modes.custom.value = 'walking';
+  f.run("currentDestination = { name: '目的地', location: [121, 31] }");
+  f.modes.current.value = 'walking'; f.modes.custom.value = 'walking';
   f.run("switchRoutePanel('current', false)");
   f.pageHandlers.pagehide.forEach(callback => callback());
   assert.equal(f.localValues.has('xingtu-usage'), true);
@@ -103,7 +102,7 @@ test('usage survives leaving and reopening with confirmed coordinates, stop orde
   assert.equal(reopened.elements.get('tour-places').value, '甲\n乙');
   assert.equal(reopened.elements.get('end-mode').value, 'free');
   assert.equal(reopened.elements.get('objective').value, 'distance');
-  assert.equal(reopened.modes.current.value, 'transfer');
+  assert.equal(reopened.modes.current.value, 'walking');
   assert.equal(reopened.modes.custom.value, 'walking');
   assert.equal(reopened.run('currentDestination.name'), '目的地');
   assert.equal(reopened.run('livePosition'), null);
@@ -584,7 +583,7 @@ function confirmedPair(travelMode = 'driving') {
   return f;
 }
 
-for (const travelMode of ['driving', 'transfer', 'walking', 'riding']) {
+for (const travelMode of ['driving', 'walking']) {
   test('legacy two-point ' + travelMode + ' dispatches the selected service and shows its result', async () => {
     const f = confirmedPair(travelMode);
     const task = f.elements.get('route-form').onsubmit(event);
@@ -617,22 +616,6 @@ for (const policy of [0, 1, 2, 4]) {
     assert.equal(f.elements.get('summary').hidden, false);
   });
 }
-
-test('bus routing requires a city and passes separate origin and destination cities', async () => {
-  const f = confirmedPair('transfer'); f.elements.get('city').value = '  ';
-  await f.elements.get('route-form').onsubmit(event);
-  assert.equal(f.pending.length, 0);
-  assert.match(f.elements.get('status').textContent, /公交规划需要填写所在城市/);
-  f.elements.get('city').value = ' 北京 ';
-  const task = f.elements.get('route-form').onsubmit(event);
-  assert.equal(f.searches[0].options.city, '北京');
-  assert.equal(f.searches[0].options.cityd, '天津市');
-  f.pending.shift()('complete', { plans: [{ time: 1200, distance: 5000 }] }); await task;
-  f.run('delete selected.end.cityname');
-  const fallback = f.elements.get('route-form').onsubmit(event);
-  assert.equal(f.searches[1].options.cityd, '北京');
-  f.pending.shift()('complete', { plans: [{ time: 1200, distance: 5000 }] }); await fallback;
-});
 
 test('swapping endpoints preserves confirmed coordinates and invalidates a previous route', async () => {
   const f = confirmedPair();
@@ -852,7 +835,7 @@ for (const action of ['add', 'remove']) {
   });
 }
 
-for (const travelMode of ['transfer', 'walking', 'riding']) {
+for (const travelMode of ['walking']) {
   test('switching a completed two-point auto tour to ' + travelMode + ' enables the legacy two-point route', async () => {
     const f = confirmedPair(); await completeAutoTour(f);
     f.mode.value = travelMode; f.mode.handlers.change();
@@ -1276,12 +1259,6 @@ function confirmCurrentDestination(f) {
   f.run("currentDestination = { name: '天坛公园', location: '116.41,39.88', cityname: '北京市' }; $('current-destination').value = currentDestination.name; syncCurrentForm()");
 }
 function completeRoute(f) { f.pending.shift()('complete', { routes: [{ time: 600, distance: 1500 }] }); }
-function mockGeocoder(f) {
-  const pending = [];
-  f.context.AMap.Geocoder = class { getAddress(location, callback) { pending.push({ location, callback }); } };
-  f.context.AMap.Transfer = f.context.AMap.Driving;
-  return pending;
-}
 test('switching panels cancels pending tour identification immediately and ignores late places', async () => {
   const f = liveFixture('custom'); f.emitPosition(); confirmCurrentDestination(f);
   f.context.AMap.PlaceSearch = class { search(keyword, callback) { f.placePending.push({ keyword, callback }); } };
@@ -1433,10 +1410,10 @@ test('switching away from a pending custom GPS start prevents later coordinates 
   f.run("switchRoutePanel('current', false)"); f.emitPosition();
   assert.equal(f.run('selected.start.location'), 'keep'); assert.equal(f.elements.get('locate').disabled, false);
 });
-test('current walking and riding use their own mode regardless of custom driving stops', async () => {
+test('current walking uses its own mode regardless of custom driving stops', async () => {
   const f = liveFixture('current'); f.emitPosition(); confirmCurrentDestination(f);
-  f.context.AMap.Walking = f.context.AMap.Driving; f.context.AMap.Riding = f.context.AMap.Driving;
-  for (const mode of ['walking', 'riding']) {
+  f.context.AMap.Walking = f.context.AMap.Driving;
+  for (const mode of ['walking']) {
     f.modes.current.value = mode; f.modes.current.handlers.change();
     const task = f.elements.get('current-route-form').onsubmit(event); completeRoute(f); await task;
     assert.equal(f.elements.get('summary').hidden, false); assert.equal(f.searches.at(-1).options.policy, undefined);
@@ -1448,40 +1425,6 @@ test('current driving applies only the current panel policy', async () => {
   const task = f.elements.get('current-route-form').onsubmit(event);
   assert.equal(f.searches[0].options.policy, 4); completeRoute(f); await task;
 });
-test('current transit reverse-geocodes the snapshot city and never uses the custom default city', async () => {
-  const f = liveFixture('current'); f.emitPosition([113.26, 23.13]); confirmCurrentDestination(f);
-  f.modes.current.value = 'transfer'; f.elements.get('city').value = '北京';
-  const geocodes = mockGeocoder(f), task = f.elements.get('current-route-form').onsubmit(event);
-  assert.deepEqual(geocodes[0].location, [113.26, 23.13]);
-  geocodes[0].callback('complete', { regeocode: { addressComponent: { city: '广州市', province: '广东省' } } });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.searches[0].options.city, '广州市'); assert.equal(f.searches[0].options.cityd, '北京市');
-  completeRoute(f); await task; assert.equal(f.elements.get('current-city').value, '广州市');
-});
-test('municipal transit city uses province when city is an empty array', async () => {
-  const f = liveFixture('current'); f.emitPosition(); confirmCurrentDestination(f); f.modes.current.value = 'transfer';
-  const geocodes = mockGeocoder(f), task = f.elements.get('current-route-form').onsubmit(event);
-  geocodes[0].callback('complete', { regeocode: { addressComponent: { city: [], province: '北京市' } } });
-  await new Promise(resolve => setImmediate(resolve)); assert.equal(f.searches[0].options.city, '北京市'); completeRoute(f); await task;
-});
-test('failed transit city lookup has manual recovery and does not silently fall back to Beijing', async () => {
-  const f = liveFixture('current'); f.emitPosition(); confirmCurrentDestination(f); f.modes.current.value = 'transfer';
-  const geocodes = mockGeocoder(f), task = f.elements.get('current-route-form').onsubmit(event);
-  geocodes[0].callback('error', {}); await task;
-  assert.equal(f.searches.length, 0); assert.match(f.elements.get('status').textContent, /手动填写公交出发城市/);
-  f.elements.get('current-city').value = '深圳'; f.elements.get('current-city').handlers.input();
-  const retry = f.elements.get('current-route-form').onsubmit(event); await Promise.resolve();
-  assert.equal(geocodes.length, 1); assert.equal(f.searches[0].options.city, '深圳'); completeRoute(f); await retry;
-});
-test('switching during city detection cancels promptly and ignores late geocoding', async () => {
-  const f = liveFixture('current'); f.emitPosition(); confirmCurrentDestination(f); f.modes.current.value = 'transfer';
-  const geocodes = mockGeocoder(f), task = f.elements.get('current-route-form').onsubmit(event);
-  f.run("switchRoutePanel('custom', false)"); await task;
-  assert.equal(f.run('busy'), false);
-  geocodes[0].callback('complete', { regeocode: { addressComponent: { city: '迟到城市' } } });
-  assert.equal(f.searches.length, 0); assert.equal(f.elements.get('current-city').value, '');
-  assert.match(f.elements.get('status').textContent, /已切换面板/);
-});
 test('keyboard panel switching and language changes preserve selections and location', () => {
   const f = liveFixture('current'); f.emitPosition(); confirmCurrentDestination(f);
   f.elements.get('current-tab').handlers.keydown({ ...event, key: 'End' });
@@ -1492,4 +1435,39 @@ test('keyboard panel switching and language changes preserve selections and loca
   assert.equal(f.run('currentDestination.name'), '天坛公园'); assert.equal(f.markers.length, 1);
   assert.match(f.elements.get('current-destination-state').textContent, /Confirmed/);
   assert.match(f.elements.get('current-origin-status').textContent, /Accuracy about 12/);
+});
+
+test('disabled bus and cycling never dispatch a service from either panel', async () => {
+  for (const mode of ['transfer', 'riding']) {
+    const custom = confirmedPair(mode);
+    await custom.elements.get('route-form').onsubmit(event);
+    assert.equal(custom.searches.length, 0);
+    assert.match(custom.elements.get('status').textContent, /公交和骑行已关闭/);
+    const current = liveFixture('current'); current.emitPosition(); confirmCurrentDestination(current);
+    current.modes.current.value = mode;
+    await current.elements.get('current-route-form').onsubmit(event);
+    assert.equal(current.searches.length, 0);
+  }
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8'), /value="(?:transfer|riding)"/);
+});
+
+test('legacy bus and cycling preferences restore to driving without dropping saved places', () => {
+  const f = fixture(); f.elements.get('start').value = '保留起点'; f.elements.get('start').handlers.input();
+  f.run('saveUsage()');
+  const data = JSON.parse(f.localValues.get('xingtu-usage'));
+  data.modes = { custom: 'riding', current: 'transfer' }; data.fields['current-city'] = '上海';
+  f.localValues.set('xingtu-usage', JSON.stringify(data));
+  const restored = fixture(null, { localValues: f.localValues });
+  assert.equal(restored.elements.get('start').value, '保留起点');
+  assert.equal(restored.modes.custom.value, 'driving'); assert.equal(restored.modes.current.value, 'driving');
+});
+
+test('metro window connects to fresh location without changing the existing route panel', () => {
+  const f = liveFixture('custom'); f.emitPosition();
+  let options, opens = 0, clears = 0;
+  f.context.window.Metro = { create(value) { options = value; return { open() { opens++; }, onLocationState() {}, clear() { clears++; } }; } };
+  f.elements.get('open-metro').onclick(); f.elements.get('open-metro').onclick();
+  assert.equal(opens, 2); assert.ok(options.getPosition());
+  assert.equal(f.run('activeRoutePanel'), 'custom');
+  f.elements.get('clear-memory').onclick(); assert.equal(clears, 1);
 });

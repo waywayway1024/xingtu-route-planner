@@ -11,6 +11,8 @@ fs.mkdirSync(stage, { recursive: true });
 fs.mkdirSync(output, { recursive: true });
 const names = ['index.html', 'styles.css', 'app.js', 'i18n.js', 'live-location.js', 'route-optimizer.js', 'worker.mjs', 'build-site.cjs', 'public-assets.cjs', 'pwa.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 names.push('startup-1206x2622.png', 'startup-2622x1206.png');
+names.push('metro.js');
+names.push('metro-map.html');
 const hashes = {};
 for (const name of names) {
   const bytes = fs.readFileSync(path.join(source, name));

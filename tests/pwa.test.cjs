@@ -46,6 +46,7 @@ function zoomEvent(page, type, target, touches) {
 }
 const outside = { closest: () => null };
 const mapSurface = { closest: selector => selector === '#map' ? {} : null };
+const metroSurface = { closest: selector => selector === '#metro-map' ? {} : null };
 const mapCard = { closest: () => ({}) };
 
 test('phone page zoom is blocked without cancelling single-finger scrolling or taps', () => {
@@ -82,6 +83,14 @@ test('desktop browser zoom is unchanged and phone restrictions do not depend on 
   const phone = browser({ coarse: true, version: '__APP_VERSION__' });
   assert.equal(zoomEvent(phone, 'gesturestart', outside), true);
   assert.equal(phone.calls.length, 0);
+});
+
+test('metro pinch and double tap stay inside its map without enabling page zoom', () => {
+  const page = browser({ coarse: true });
+  assert.equal(zoomEvent(page, 'touchmove', metroSurface, [metroSurface, metroSurface]), false);
+  assert.equal(zoomEvent(page, 'gesturestart', metroSurface), false);
+  assert.equal(zoomEvent(page, 'dblclick', metroSurface), false);
+  assert.equal(zoomEvent(page, 'touchmove', metroSurface, [metroSurface, outside]), true);
 });
 
 test('startup checks the server without caching or refreshing the current page', async () => {
