@@ -7,7 +7,7 @@ const { cityForAddress } = require('../metro.js');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const cities = { 1100: { name: '北京市' }, 4401: { name: '广州市' } };
 
-function fixture({ address = { city: [], province: '北京市' }, position = true, deferred = false, saved = null, offline = false } = {}) {
+function fixture({ address = { city: [], province: '北京市' }, position = true, deferred = false, saved = null, offline = false, storageFailure = false, unavailableStation = false, renamedStation = false } = {}) {
   const elements = new Map(), storage = new Map(), timers = new Map(), geocodes = [], views = [];
   if (saved) storage.set('xingtu-metro', JSON.stringify(saved));
   class Element {
@@ -24,18 +24,21 @@ function fixture({ address = { city: [], province: '北京市' }, position = tru
   }
   const document = { readyState: 'complete', getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); }, createElement() { return new Element(); }, querySelector() { return null; }, documentElement: new Element(), head: new Element() };
   const points = { a: { id: 'a', poiid: 'pa', name: '甲站', status: '1', referlines: [{ name: '1号线' }] }, b: { id: 'b', poiid: 'pb', name: '乙站', status: '1', referlines: [] }, closed: { id: 'closed', name: '未开通站', status: '0' } };
+  if (unavailableStation) points.b.status = '0';
+  if (renamedStation) { points.b.name = '乙站新名'; points.b.poiid = 'pb-new'; }
   const window = { I18n: { t: text => text, onChange() {} }, AMap: { Geocoder: class { getAddress(location, callback) { geocodes.push({ location, callback }); if (!deferred) callback('complete', { regeocode: { addressComponent: address } }); } } }, subway(id, options) {
     const handlers = {}, calls = [];
     const view = { options, handlers, calls, event: { on(name, callback) { handlers[name] = callback; } }, getStationInfo(id) { return points[id] || {}; }, getLineList(callback) { callback([{ id: 'line', name: '1号线' }]); }, getNearStation() { return 'a'; }, getStCenter(id) { return id; }, stationSearch(keyword, callback) { callback({ keyword, stationList: [points.a] }); } };
     for (const method of ['setAdcode', 'clearRoute', 'clearOverlays', 'stopAnimation', 'setCenter', 'clearMarker', 'setStart', 'setEnd', 'showLine', 'setFitView', 'clearLine', 'scale', 'route']) view[method] = (...args) => calls.push({ method, args });
     view.emit = (name, info) => handlers[name]?.({}, info);
+    view.routeWithData = args => { calls.push({ method: 'routeWithData', args: [args] }); view.emit('subway.routeComplete', { status: 1, data: args.routedata }); };
     views.push(view); return view;
   } };
   document.getElementById('metro-frame').contentWindow = window;
   document.getElementById('metro-frame').contentDocument = document;
   window.document = document;
   let requests = 0, nextTimer = 0, locationRequests = 0;
-  const context = { window, document, localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }, Date, AbortController, URLSearchParams,
+  const context = { window, document, localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => { if (storageFailure) throw new Error('quota'); storage.set(key, value); }, removeItem: key => storage.delete(key) }, Date, AbortController, URLSearchParams,
     setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay }); return id; }, clearTimeout(id) { timers.delete(id); },
     async fetch() { requests++; if (offline) throw new Error('offline'); return { ok: true, json: async () => ({ citylist: Object.entries(cities).map(([adcode, city]) => ({ adcode, cityname: city.name })) }) }; }
   };
@@ -161,4 +164,133 @@ test('a stalled embedded map page times out and remains closable', async () => {
   assert.match(f.$('metro-status').textContent, /加载失败/);
   assert.equal(f.views.length, 0);
   f.$('metro-close').onclick(); assert.equal(f.$('metro-dialog').open, false);
+});
+
+const plannedData = { count: '1', buslist: [{ spoi: { id: 'pa' }, epoi: { id: 'pb' }, expense: '3', expensetime: '900', segmentlist: [
+  { bustype: '2', startname: '甲站', endname: '换乘站', busname: '地铁1号线' },
+  { bustype: '2', startname: '换乘站', endname: '乙站', busname: '地铁2号线' }
+] }] };
+async function savedJourney() {
+  const f = fixture(); await f.open(); f.choose('a', 'start'); f.choose('b', 'end'); f.$('metro-plan').onclick();
+  f.views[0].emit('subway.routeComplete', { status: 1, data: plannedData });
+  return JSON.parse(f.storage.get('xingtu-metro'));
+}
+
+test('a fresh process restores the complete itinerary and highlighted path without a new route request or GPS', async () => {
+  const saved = await savedJourney(), restarted = fixture({ saved, position: false });
+  assert.equal(restarted.$('metro-start').value, '甲站');
+  assert.equal(restarted.$('metro-result').hidden, false);
+  await restarted.open();
+  assert.equal(restarted.$('metro-end').value, '乙站');
+  assert.equal(restarted.$('metro-result').children[0].textContent, '15分钟 · 3 元');
+  assert.equal(restarted.$('metro-result').children.length, 3);
+  const calls = restarted.views[0].calls;
+  assert.equal(calls.filter(call => call.method === 'route').length, 0);
+  assert.equal(calls.filter(call => call.method === 'routeWithData').length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.find(call => call.method === 'routeWithData').args[0].routedata)), plannedData);
+  assert.equal(restarted.locationRequests, 0);
+});
+
+test('automatic location in a different city does not overwrite the saved journey', async () => {
+  const saved = await savedJourney(), restarted = fixture({ saved, address: { city: '广州市' } });
+  await restarted.open();
+  assert.equal(restarted.views[0].options.adcode, 1100);
+  assert.equal(restarted.$('metro-city').value, '1100');
+  assert.equal(restarted.$('metro-result').hidden, false);
+  assert.equal(JSON.parse(restarted.storage.get('xingtu-metro')).city, '1100');
+  assert.equal(restarted.geocodes.length, 0);
+});
+
+test('network failure keeps cached names, transfers and storage available', async () => {
+  const saved = await savedJourney(), restarted = fixture({ saved, offline: true, position: false });
+  await restarted.open();
+  assert.equal(restarted.$('metro-start').value, '甲站');
+  assert.equal(restarted.$('metro-end').value, '乙站');
+  assert.equal(restarted.$('metro-result').hidden, false);
+  assert.match(restarted.$('metro-result').children[2].textContent, /换乘站 → 乙站/);
+  assert.deepEqual(JSON.parse(restarted.storage.get('xingtu-metro')), saved);
+});
+
+test('legacy saved station ids restore without GPS and do not imply a planned route', async () => {
+  const restarted = fixture({ saved: { city: '1100', start: 'a', end: 'b', manualCity: false }, position: false });
+  await restarted.open();
+  assert.equal(restarted.$('metro-start').value, '甲站');
+  assert.equal(restarted.$('metro-result').hidden, true);
+  assert.equal(restarted.views[0].calls.filter(call => call.method === 'route').length, 0);
+});
+
+test('a failed replanning request keeps the last successful route', async () => {
+  const saved = await savedJourney(), f = fixture({ saved }); await f.open();
+  f.$('metro-plan').onclick();
+  [...f.timers.values()].find(timer => timer.delay === 15000).fn();
+  assert.equal(f.$('metro-result').hidden, false);
+  assert.deepEqual(JSON.parse(f.storage.get('xingtu-metro')).route, plannedData);
+});
+
+test('clear usage invalidates an in-flight route and no saved journey returns on restart', async () => {
+  const f = fixture({ saved: await savedJourney() }); await f.open(); f.$('metro-plan').onclick();
+  f.controller.clear();
+  f.views[0].emit('subway.routeComplete', { status: 1, data: plannedData });
+  assert.equal(f.$('metro-result').hidden, true);
+  assert.equal(f.storage.has('xingtu-metro'), false);
+  const restarted = fixture({ saved: f.storage.get('xingtu-metro') }); await restarted.open();
+  assert.equal(restarted.$('metro-start').value, '');
+  assert.equal(restarted.$('metro-end').value, '');
+  assert.equal(restarted.$('metro-result').hidden, true);
+});
+
+test('clear selection removes the route and endpoints from saved state', async () => {
+  const f = fixture({ saved: await savedJourney() }); await f.open(); f.$('metro-reset').onclick();
+  const saved = JSON.parse(f.storage.get('xingtu-metro'));
+  assert.equal(saved.start, null); assert.equal(saved.end, null); assert.equal(saved.route, null);
+  const restarted = fixture({ saved }); await restarted.open();
+  assert.equal(restarted.$('metro-result').hidden, true);
+});
+
+test('clear selection also cancels a pending request and ignores its late result', async () => {
+  const f = fixture({ saved: await savedJourney() }); await f.open(); f.$('metro-plan').onclick();
+  f.$('metro-reset').onclick();
+  f.views[0].emit('subway.routeComplete', { status: 1, data: plannedData });
+  const saved = JSON.parse(f.storage.get('xingtu-metro'));
+  assert.equal(saved.start, null); assert.equal(saved.end, null); assert.equal(saved.route, null);
+  assert.equal(f.$('metro-result').hidden, true);
+});
+
+test('unavailable saved stations retain the last itinerary instead of erasing it', async () => {
+  const saved = await savedJourney(), f = fixture({ saved, unavailableStation: true }); await f.open();
+  assert.equal(f.$('metro-end').value, '乙站');
+  assert.equal(f.$('metro-result').hidden, false);
+  assert.deepEqual(JSON.parse(f.storage.get('xingtu-metro')).route, plannedData);
+  assert.equal(f.$('metro-plan').disabled, true);
+});
+
+test('provider station metadata changes cannot invalidate the saved itinerary on the following restart', async () => {
+  const saved = await savedJourney(), f = fixture({ saved, renamedStation: true }); await f.open();
+  assert.equal(f.$('metro-end').value, '乙站');
+  const restarted = fixture({ saved: JSON.parse(f.storage.get('xingtu-metro')), renamedStation: true }); await restarted.open();
+  assert.equal(restarted.$('metro-result').hidden, false);
+  assert.deepEqual(JSON.parse(restarted.storage.get('xingtu-metro')).route, plannedData);
+  restarted.$('metro-plan').onclick();
+  const updated = { ...plannedData, buslist: [{ ...plannedData.buslist[0], epoi: { id: 'pb-new' } }] };
+  restarted.views[0].emit('subway.routeComplete', { status: 1, data: updated });
+  const updatedSaved = JSON.parse(restarted.storage.get('xingtu-metro'));
+  assert.equal(updatedSaved.end.poiid, 'pb-new');
+  assert.equal(updatedSaved.end.name, '乙站新名');
+  assert.deepEqual(updatedSaved.route, updated);
+});
+
+test('mismatched or malformed cached routes are not displayed', async () => {
+  const saved = await savedJourney();
+  for (const route of [{ ...plannedData, buslist: [{ ...plannedData.buslist[0], epoi: { id: 'other' } }] }, { ...plannedData, buslist: [{ ...plannedData.buslist[0], segmentlist: [null] }] }]) {
+    const f = fixture({ saved: { ...saved, route } }); await f.open();
+    assert.equal(f.$('metro-result').hidden, true);
+    assert.equal(f.views[0].calls.filter(call => call.method === 'routeWithData').length, 0);
+  }
+});
+
+test('storage failure is visible after a route succeeds', async () => {
+  const f = fixture({ storageFailure: true }); await f.open(); f.choose('a', 'start'); f.choose('b', 'end'); f.$('metro-plan').onclick();
+  f.views[0].emit('subway.routeComplete', { status: 1, data: plannedData });
+  assert.equal(f.$('metro-result').hidden, false);
+  assert.match(f.$('metro-status').textContent, /无法保存地铁/);
 });

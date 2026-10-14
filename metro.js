@@ -27,20 +27,37 @@
     let cities, view, city = '', start = null, end = null, station = null;
     let ready = false, loading = false, manualCity = false, waitingPosition = false, locating = false;
     let opening = 0, geocodeVersion = 0, loadTimer, routeTimer, pendingRoute = null;
-    let statusText = '定位城市后查看地铁线路。', statusError = false, result = null;
+    let statusText = '定位城市后查看地铁线路。', statusError = false, result = null, routeData = null, restoringRoute = false, storageError = false;
+    function stationId(value) { return typeof value === 'string' ? value : value?.id; }
+    function savedStation(value) {
+      if (typeof value === 'string') return value;
+      return value && typeof value.id === 'string' && typeof value.name === 'string' ? { id: value.id, name: value.name, poiid: value.poiid } : null;
+    }
+    function routeInfo(data) {
+      const route = data?.buslist?.[0];
+      return route && Number.isFinite(Number(route.expensetime)) && Array.isArray(route.segmentlist) && route.segmentlist.length &&
+        route.segmentlist.every(segment => segment && String(segment.bustype) === '2' && ['startname', 'endname', 'busname'].every(key => typeof segment[key] === 'string')) ? route : null;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem('xingtu-metro') || 'null');
-      if (saved && typeof saved.city === 'string') { city = saved.city; start = saved.start; end = saved.end; manualCity = Boolean(saved.manualCity); }
+      if (saved && /^\d{4}$/.test(saved.city)) {
+        city = saved.city; start = savedStation(saved.start); end = savedStation(saved.end); manualCity = Boolean(saved.manualCity);
+        const route = routeInfo(saved.route);
+        if (route && String(saved.route.count) === '1' && start?.poiid && end?.poiid && stationId(start) !== stationId(end) && route.spoi?.id === start.poiid && route.epoi?.id === end.poiid) {
+          routeData = saved.route; result = route; statusText = '已恢复上次地铁路线，可直接查看线路和换乘站。';
+        }
+      }
     } catch { /* The window still works without saved selections. */ }
     function save() {
-      try { localStorage.setItem('xingtu-metro', JSON.stringify({ city, start: start?.id || null, end: end?.id || null, manualCity })); } catch { /* Storage is optional. */ }
+      try { localStorage.setItem('xingtu-metro', JSON.stringify({ city, start: savedStation(start), end: savedStation(end), manualCity, route: routeData })); storageError = false; }
+      catch { storageError = true; }
     }
     function status(text, error = false) { statusText = text; statusError = error; render(); }
     function render() {
-      $('metro-status').textContent = t(statusText); $('metro-status').classList.toggle('error', statusError);
+      $('metro-status').textContent = t(storageError ? '无法保存地铁数据，请允许浏览器存储或释放存储空间。' : statusText); $('metro-status').classList.toggle('error', statusError || storageError);
       $('metro-start').value = start?.name || ''; $('metro-end').value = end?.name || '';
       $('metro-start').placeholder = $('metro-end').placeholder = t('点击地铁站设置');
-      $('metro-plan').disabled = !ready || !start || !end || Boolean(pendingRoute);
+      $('metro-plan').disabled = !ready || !stationInfo(stationId(start)) || !stationInfo(stationId(end)) || Boolean(pendingRoute);
       $('metro-plan').textContent = t(pendingRoute ? '正在计算路线…' : '规划地铁路线');
       $('metro-city').disabled = !cities || typeof $('metro-frame').contentWindow.subway !== 'function' || loading || Boolean(pendingRoute);
       $('metro-locate').disabled = $('metro-city').disabled;
@@ -68,7 +85,7 @@
       }
     }
     function clearResult() {
-      clearTimeout(routeTimer); pendingRoute = null; result = null;
+      clearTimeout(routeTimer); pendingRoute = null; result = null; routeData = null;
       view?.clearRoute(); $('metro-search-results').hidden = true;
     }
     function reset() {
@@ -78,6 +95,18 @@
     function stationInfo(id) {
       const info = typeof id === 'string' ? view.getStationInfo(id) : null;
       return info?.id && info.name && info.status === '1' ? info : null;
+    }
+    function restoreRoute() {
+      if (!routeData || !ready || !stationInfo(stationId(start)) || !stationInfo(stationId(end)) || typeof view.routeWithData !== 'function') return false;
+      // Redraw the saved response; querying again could replace the user's itinerary.
+      restoringRoute = true;
+      try { view.routeWithData({ start: stationId(start), end: stationId(end), routedata: routeData, closeBtn: false }); return true; }
+      catch { return false; }
+      finally { restoringRoute = false; }
+    }
+    function routeFailed() {
+      clearTimeout(routeTimer); pendingRoute = null; restoreRoute();
+      status('未找到可用地铁路线，请调整站点后重试。', true);
     }
     function selectStation(id) {
       if (!ready || pendingRoute) return;
@@ -101,21 +130,23 @@
       const drawnCity = $('metro-frame').contentDocument?.getElementById('subway-svg')?.getAttribute('adcode');
       if (drawnCity && drawnCity !== city) return;
       clearTimeout(loadTimer); loading = false; ready = true;
-      start = stationInfo(typeof start === 'string' ? start : start?.id);
-      end = stationInfo(typeof end === 'string' ? end : end?.id);
-      if (start?.id === end?.id) end = null;
-      if (start) view.setStart(start.id); if (end) view.setEnd(end.id);
+      const mapStart = stationInfo(stationId(start)), mapEnd = stationInfo(stationId(end));
+      if (!result) { start = mapStart || start; end = mapEnd || end; }
+      if (start && stationId(start) === stationId(end)) { end = null; result = null; routeData = null; }
+      if (mapStart) view.setStart(mapStart.id); if (mapEnd) view.setEnd(mapEnd.id);
+      status('已加载城市全部地铁线路，可双指缩放、拖动并点击站点。');
       $('metro-line').replaceChildren();
       const all = document.createElement('option'); all.value = ''; all.textContent = t('全部线路'); $('metro-line').append(all);
       view.getLineList(lines => {
         for (const line of lines) {
           const option = document.createElement('option'); option.value = line.id; option.textContent = line.name; $('metro-line').append(option);
         }
-        status('已加载城市全部地铁线路，可双指缩放、拖动并点击站点。');
+        render();
       });
       const position = options.getPosition();
       const near = !manualCity && position ? view.getNearStation({ lnglat: String(position.location) }) : null;
-      if (start || near) view.setCenter(view.getStCenter(start?.id || near));
+      if (mapStart || near) view.setCenter(view.getStCenter(mapStart?.id || near));
+      if (result) status(restoreRoute() ? '已恢复上次地铁路线，可直接查看线路和换乘站。' : '已保留上次地铁路线，当前地铁图无法恢复高亮。');
       save(); render();
     }
     function showCity(code) {
@@ -124,8 +155,8 @@
       city = code; $('metro-city').value = code;
       $('metro-map').hidden = false;
       if (same && ready) { save(); render(); return; }
-      clearResult(); ready = false; loading = true; station = null;
-      if (!same) { start = null; end = null; }
+      ready = false; loading = true; station = null;
+      if (!same) { clearResult(); start = null; end = null; save(); }
       $('metro-search').value = '';
       status('正在加载城市地铁线路…');
       loadTimer = setTimeout(() => { loading = false; status('地铁图加载失败，请检查网络后重试。', true); }, 20000);
@@ -136,11 +167,13 @@
         view.event.on('error.complete', () => { clearTimeout(loadTimer); loading = false; ready = false; status('地铁图加载失败，请检查网络后重试。', true); });
         for (const event of ['station.touch', 'stationName.touch']) view.event.on(event, (event, info) => selectStation(info?.id));
         view.event.on('subway.routeComplete', (event, info) => {
+          if (restoringRoute) return;
           const route = info?.data?.buslist?.[0];
-          if (!pendingRoute || !route || route.spoi?.id !== pendingRoute.start || route.epoi?.id !== pendingRoute.end) { view.clearRoute(); return; }
+          if (!pendingRoute || !route || route.spoi?.id !== pendingRoute.start || route.epoi?.id !== pendingRoute.end) { view.clearRoute(); restoreRoute(); return; }
           clearTimeout(routeTimer); pendingRoute = null;
-          if (String(info.status) !== '1' || !Number.isFinite(Number(route.expensetime)) || !Array.isArray(route.segmentlist) || !route.segmentlist.length || route.segmentlist.some(segment => String(segment.bustype) !== '2')) { view.clearRoute(); status('未找到可用地铁路线，请调整站点后重试。', true); return; }
-          result = route; station = null; status('地铁路线已规划，请查看线路和换乘站。');
+          if (String(info.status) !== '1' || !routeInfo(info.data)) { view.clearRoute(); routeFailed(); return; }
+          start = stationInfo(stationId(start)) || start; end = stationInfo(stationId(end)) || end;
+          routeData = { ...info.data, count: '1' }; result = route; station = null; save(); status('地铁路线已规划，请查看线路和换乘站。');
         });
       }
     }
@@ -192,7 +225,8 @@
         });
         await loadSDK(options.getConfig().key, frame.contentWindow);
         if (token !== opening || !dialog.open) return;
-        if (manualCity && cities[city]) showCity(city); else { manualCity = false; await identify(); }
+        if (cities[city]) showCity(city); else if (!city) { manualCity = false; await identify(); }
+        else status('已保存的地铁城市暂不可用，请手动选择城市。', true);
       } catch { if (token === opening && dialog.open) status('地铁图加载失败，请检查网络后重试。', true); }
       render();
     }
@@ -214,10 +248,12 @@
     $('metro-set-start').onclick = () => setEndpoint('start'); $('metro-set-end').onclick = () => setEndpoint('end');
     $('metro-swap').onclick = () => { if (!ready || pendingRoute) return; clearResult(); view.clearOverlays(); [start, end] = [end, start]; if (start) view.setStart(start.id); if (end) view.setEnd(end.id); save(); render(); };
     $('metro-plan').onclick = () => {
-      if (!ready || !start || !end || pendingRoute) return;
-      clearResult(); pendingRoute = { start: start.poiid, end: end.poiid }; station = null;
+      if (!ready || pendingRoute) return;
+      const mapStart = stationInfo(stationId(start)), mapEnd = stationInfo(stationId(end));
+      if (!mapStart || !mapEnd) return;
+      view.clearRoute(); pendingRoute = { start: mapStart.poiid, end: mapEnd.poiid }; station = null;
       status('正在计算地铁路线…');
-      routeTimer = setTimeout(() => { pendingRoute = null; status('未找到可用地铁路线，请调整站点后重试。', true); }, 15000);
+      routeTimer = setTimeout(routeFailed, 15000);
       view.route(start.id, end.id, { closeBtn: false });
     };
     for (const [id, step] of [['metro-zoom-in', .15], ['metro-zoom-out', -.15]]) $(id).onclick = () => {
@@ -225,8 +261,9 @@
       const scale = $('metro-frame').contentDocument.querySelector('.svg-g').transform.baseVal.consolidate().matrix.a;
       view.scale(Math.max(.5, Math.min(1.3, scale + step)));
     };
-    $('metro-reset').onclick = () => { if (!pendingRoute) reset(); };
+    $('metro-reset').onclick = reset;
     root.I18n.onChange(render);
+    render();
     return { open, onPosition(position) { if (waitingPosition && cities && typeof $('metro-frame').contentWindow.subway === 'function') identify(position); }, onLocationState(state) { if (waitingPosition && state.positionState === 'error') status('定位不可用，请允许位置权限或手动选择城市。', true); }, clear() { reset(); try { localStorage.removeItem('xingtu-metro'); } catch {} } };
   }
   const api = { create, cityForAddress };
