@@ -2,6 +2,9 @@
 window.I18n = (() => {
   const english = {
   "地铁线路与换乘": "Metro lines and transfers",
+  "去滴滴打车": "Open DiDi",
+  "在滴滴中选择地点并确认叫车。": "Choose your locations and confirm your ride in DiDi.",
+  "无法打开？下载滴滴": "Can't open it? Download DiDi",
   "城市地铁": "City metro",
   "关闭地铁窗口": "Close metro window",
   "地铁城市": "Metro city",
