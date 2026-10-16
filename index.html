@@ -126,20 +126,17 @@
   <main class="workspace">
     <aside class="sidebar">
       <div class="intro"><span class="eyebrow">YOUR NEXT JOURNEY</span><h1>想去的地方，一次安排</h1><p>输入地点，让程序帮你安排第一站到最后一站。</p></div>
-      <div class="memory-controls"><p id="memory-status" data-dynamic role="status" aria-live="polite">使用数据自动保存在此浏览器，直到手动清除。</p><button id="clear-memory" type="button" class="text-button">清除使用数据</button></div>
+      <div class="memory-controls"><p id="memory-status" data-dynamic role="status" aria-live="polite"></p><button id="clear-memory" type="button" class="text-button">清除使用数据</button></div>
       <button id="open-metro" class="button secondary metro-entry" type="button">地铁线路与换乘 <span>↗</span></button>
-      <a id="open-taxi" class="button secondary taxi-entry" href="https://static.udache.com/agility-sdk/pages/invoke/jump-home.html?businessId=flash&amp;page=jump&amp;path=entrance" target="_blank" rel="noopener noreferrer" aria-describedby="taxi-note">去滴滴打车 <span aria-hidden="true">↗</span></a>
-      <p id="taxi-note" class="taxi-note">在滴滴中选择地点并确认叫车。 <a href="https://www.didiglobal.com/download" target="_blank" rel="noopener noreferrer">无法打开？下载滴滴</a></p>
+      <a id="open-taxi" class="button secondary taxi-entry" href="https://static.udache.com/agility-sdk/pages/invoke/jump-home.html?businessId=flash&amp;page=jump&amp;path=entrance" target="_blank" rel="noopener noreferrer">去滴滴打车 <span aria-hidden="true">↗</span></a>
       <div class="route-tabs" role="tablist" aria-label="选择路线方式"><button id="current-tab" type="button" role="tab" aria-controls="current-route-panel" aria-selected="true" tabindex="0">从当前位置出发</button><button id="custom-tab" type="button" role="tab" aria-controls="custom-route-panel" aria-selected="false" tabindex="-1">自定义路线</button></div>
       <section id="current-route-panel" role="tabpanel" aria-labelledby="current-tab">
-        <p class="panel-intro">定位你的出发位置，只需选择目的地。</p>
-        <div class="current-origin"><span class="current-origin-dot" aria-hidden="true"></span><div><strong>当前位置</strong><p id="current-origin-status" data-dynamic role="status">请先获取当前位置</p></div><button id="current-locate" class="text-button" type="button">获取位置</button></div>
+        <div class="current-origin"><span class="current-origin-dot" aria-hidden="true"></span><div><strong>当前位置</strong><p id="current-origin-status" data-dynamic role="status"></p></div><button id="current-locate" class="text-button" type="button">获取位置</button></div>
         <form id="current-route-form">
-          <div class="location-field current-destination-field"><label for="current-destination">目的地</label><input id="current-destination" placeholder="输入你想去的地址或地点" autocomplete="off" required aria-controls="current-destination-options"><div id="current-destination-options" class="suggestions" hidden></div><small id="current-destination-state" data-dynamic class="address-state">等待输入目的地</small></div>
+          <div class="location-field current-destination-field"><label for="current-destination">目的地</label><input id="current-destination" placeholder="输入你想去的地址或地点" autocomplete="off" required aria-controls="current-destination-options"><div id="current-destination-options" class="suggestions" hidden></div><small id="current-destination-state" data-dynamic class="address-state"></small></div>
           <fieldset class="modes"><legend>出行方式</legend><label><input type="radio" name="current-mode" value="driving" checked><span>驾车</span></label><label><input type="radio" name="current-mode" value="walking"><span>步行</span></label></fieldset>
           <div id="current-policy-field"><label for="current-policy">驾车偏好</label><select id="current-policy"><option value="0">速度优先</option><option value="1">费用优先</option><option value="2">距离优先</option><option value="4">躲避拥堵</option></select></div>
           <button id="current-plan" class="button primary" type="submit" disabled>规划路线 <span>→</span></button>
-          <p class="panel-note">路线采用点击规划时的位置。移动后，可再次规划。</p>
         </form>
       </section>
       <section id="custom-route-panel" role="tabpanel" aria-labelledby="custom-tab" hidden>
@@ -183,7 +180,6 @@
       <section id="visit-order" class="visit-order" hidden><h2>推荐访问顺序</h2><ol id="order-list" data-dynamic></ol><p id="optimization-note" data-dynamic></p><div class="result-actions"><button id="apply-order" type="button" class="text-button">将顺序填回地址栏</button><button id="copy-order" type="button" class="text-button">复制行程</button></div></section>
       <p id="saved-route-note" class="panel-note" hidden>上次规划结果（非实时），点击规划路线可更新。</p>
       <div id="route-panel" data-dynamic aria-label="路线详细信息"></div>
-      <footer class="sidebar-footer">路线与预计耗时由高德地图提供<br>实际出行请以现场道路情况为准</footer>
     </aside>
     <section class="map-area" aria-label="地图">
       <div id="map"></div>
