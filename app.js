@@ -31,8 +31,8 @@ function currentMode() { return document.querySelector('input[name="current-mode
 function syncCurrentForm() {
   $('current-plan').disabled = busy || !loadedConfig || !freshCurrentPosition();
   $('current-policy-field').hidden = currentMode() !== 'driving';
-  writeText('current-origin-status', () => liveState ? $('live-position-status').textContent : t('请先获取当前位置'));
-  writeText('current-destination-state', () => currentDestination ? t('✓ 已确认 · ') + (typeof currentDestination.address === 'string' && currentDestination.address || pointName(currentDestination)) : $('current-destination').value.trim() ? t('请选择候选地点确认位置') : t('等待输入目的地'));
+  writeText('current-origin-status', () => liveState ? $('live-position-status').textContent : '');
+  writeText('current-destination-state', () => currentDestination ? t('✓ 已确认 · ') + (typeof currentDestination.address === 'string' && currentDestination.address || pointName(currentDestination)) : $('current-destination').value.trim() ? t('请选择候选地点确认位置') : '');
   $('current-destination').setAttribute('aria-invalid', String(Boolean($('current-destination').value.trim() && !currentDestination)));
 }
 function startCurrentLocation() {
@@ -46,7 +46,7 @@ function switchRoutePanel(next, startLocation = true) {
     activeRoutePanel = next; panelVersion++; clearRoute(); hideOptions(); clearStopDrag(); closeMapPlace();
     $('current-destination-options').hidden = true;
     if (pendingLocationStart !== null) { pendingLocationStart = null; versions.start++; $('locate').disabled = false; }
-    status(() => t('已切换面板，输入已保留，请重新规划路线。'));
+    status('');
   }
   for (const name of ['current', 'custom']) {
     $(name + '-route-panel').hidden = name !== next;
@@ -843,7 +843,7 @@ function saveUsage() {
     const data = { version: 1, panel: activeRoutePanel, fields: Object.fromEntries(memoryFields.map(id => [id, $(id).value])), modes: { custom: mode(), current: currentMode() }, addresses: addressIds().map(id => ({ text: $(id).value, point: memoryPoint(selected[id]) })), currentDestination: memoryPoint(currentDestination), tourInputSnapshot, addressDetailsOpen: Boolean($('address-details').open), mapView: savedMapView, route: lastRoute };
     localStorage.setItem('xingtu-usage', JSON.stringify(data));
     usageDirty = false;
-    writeText('memory-status', () => t('使用数据已保存在此浏览器，关闭网页后仍会保留。'));
+    writeText('memory-status', () => '');
   } catch { writeText('memory-status', () => t('无法保存使用数据，请允许浏览器存储或释放存储空间。')); }
 }
 function validSavedRoute(route) {
@@ -875,7 +875,7 @@ function restoreUsage() {
       lastRoute.instructions.forEach(text => { const item = document.createElement('li'); item.textContent = text; details.append(item); });
       $('route-panel').append(details);
     }
-    writeText('memory-status', () => t('已恢复上次使用数据。只有手动清除才会删除。'));
+    writeText('memory-status', () => '');
   } catch { writeText('memory-status', () => t('保存的使用数据无法恢复，请手动清除后重新开始。')); }
 }
 function drawSavedRoute() {
@@ -902,7 +902,7 @@ $('clear-memory').onclick = () => {
   $('locate').disabled = false; $('batch-addresses').value = ''; $('address-details').open = false;
   updateMultiOptions(); syncCurrentForm();
   usageReady = true;
-  writeText('memory-status', () => t('使用数据已清除。下次输入后会自动保存新的数据。'));
+  writeText('memory-status', () => '');
 };
 $('open-metro').onclick = () => {
   if (!loadedConfig) { openSettings(); return; }

@@ -93,6 +93,7 @@ test('usage survives leaving and reopening with confirmed coordinates, stop orde
   f.run("switchRoutePanel('current', false)");
   f.pageHandlers.pagehide.forEach(callback => callback());
   assert.equal(f.localValues.has('xingtu-usage'), true);
+  assert.equal(f.elements.get('memory-status').textContent, '');
   const reopened = fixture(null, { localValues: f.localValues, initialPanel: 'current' });
   assert.equal(reopened.run('activeRoutePanel'), 'current');
   assert.equal(reopened.elements.get('city').value, '上海');
@@ -106,6 +107,7 @@ test('usage survives leaving and reopening with confirmed coordinates, stop orde
   assert.equal(reopened.modes.custom.value, 'walking');
   assert.equal(reopened.run('currentDestination.name'), '目的地');
   assert.equal(reopened.run('livePosition'), null);
+  assert.equal(reopened.elements.get('memory-status').textContent, '');
   assert.equal(reopened.elements.get('current-plan').disabled, true);
 });
 test('a completed route restores its summary, road geometry and itinerary without another query', async () => {
@@ -138,6 +140,7 @@ test('manual clear cancels pending saves and keeps configuration, language and t
   f.context.window.confirm = () => true; f.elements.get('clear-memory').onclick();
   f.pageHandlers.pagehide.forEach(callback => callback());
   assert.equal(f.localValues.has('xingtu-usage'), false);
+  assert.equal(f.elements.get('memory-status').textContent, '');
   assert.equal(f.elements.get('start').value, '');
   assert.equal(f.run('selected.start'), null);
   assert.equal(f.localValues.get('xingtu-config'), 'personal settings');
@@ -1273,7 +1276,7 @@ test('switching panels cancels pending tour identification immediately and ignor
   await task;
   assert.equal(f.run('busy'), false);
   assert.equal(f.elements.get('current-plan').disabled, false);
-  assert.match(f.elements.get('status').textContent, /已切换面板/);
+  assert.equal(f.elements.get('status').textContent, '');
   late.callback('complete', { poiList: { pois: [{ name: '甲', location: 'old' }] } });
   assert.equal(f.run('selected.start'), null);
   assert.equal(f.searches.length, 0);
@@ -1402,7 +1405,7 @@ test('switching cancels an outstanding route immediately and ignores its late re
   const task = f.elements.get('current-route-form').onsubmit(event), callback = f.pending.shift();
   f.run("switchRoutePanel('custom', false)"); await task;
   assert.equal(f.run('busy'), false); assert.equal(f.elements.get('summary').hidden, true);
-  assert.match(f.elements.get('status').textContent, /已切换面板/);
+  assert.equal(f.elements.get('status').textContent, '');
   callback('complete', { routes: [{ time: 60, distance: 100 }] });
   assert.equal(f.elements.get('summary').hidden, true);
   assert.equal(f.elements.get('planning-progress').hidden, true);
