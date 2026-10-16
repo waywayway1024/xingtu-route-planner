@@ -140,13 +140,11 @@
         </form>
       </section>
       <section id="custom-route-panel" role="tabpanel" aria-labelledby="custom-tab" hidden>
-      <p class="panel-intro">自行选择起点、终点和需要到访的地址。</p>
       <form id="route-form" novalidate>
-        <label class="city-label" for="city">搜索城市 <span>用于缩小地点搜索范围</span></label>
+        <label for="city">搜索城市</label>
         <input id="city" placeholder="例如：上海" value="北京" autocomplete="off">
         <section class="tour-entry" aria-label="自动安排游玩路线">
           <h2>把想去的地点，都放进来</h2>
-          <p>每行一个地点，共 2–8 个，顺序随意。起点、终点从这些地点中自动选择，无需返回第一站。</p>
           <label for="tour-places">游玩地点</label>
           <textarea id="tour-places" rows="5" placeholder="天坛公园&#10;颐和园&#10;故宫博物院&#10;北海公园" aria-describedby="tour-hint"></textarea>
           <label for="tour-objective">路线偏好</label>
