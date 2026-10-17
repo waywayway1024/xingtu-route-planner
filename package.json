@@ -1,6 +1,6 @@
 {
   "name": "manmanhang",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "private": true,
   "description": "基于高德地图 JS API 的国内路线规划网页",
   "scripts": {

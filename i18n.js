@@ -3,6 +3,7 @@ window.I18n = (() => {
   const english = {
   "地铁线路与换乘": "Metro lines and transfers",
   "去滴滴打车": "Open DiDi",
+  "前往高德": "Open AMap",
   "城市地铁": "City metro",
   "关闭地铁窗口": "Close metro window",
   "地铁城市": "Metro city",

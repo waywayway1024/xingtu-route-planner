@@ -909,3 +909,4 @@ $('open-metro').onclick = () => {
   if (!metroWindow) metroWindow = window.Metro.create({ getConfig: () => config, getPosition: freshCurrentPosition, requestLocation: startCurrentLocation });
   metroWindow.open();
 };
+$('open-amap').href = (/Android/.test(navigator.userAgent) ? 'androidamap' : 'iosamap') + '://rootmap?sourceApplication=manmanhang';

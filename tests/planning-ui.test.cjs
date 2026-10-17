@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 // A small DOM adapter exercises the app's actual handlers without calling AMap.
 function fixture(savedLanguage = null, settings = {}) {
-  const { navConfig = {}, savedConfig = null, initialPanel = 'custom', localValues = new Map() } = typeof settings === 'string' ? { initialPanel: settings } : settings;
+  const { navConfig = {}, savedConfig = null, initialPanel = 'custom', localValues = new Map(), userAgent = '' } = typeof settings === 'string' ? { initialPanel: settings } : settings;
   const elements = new Map();
   class Element {
     constructor(tag = 'div') { this.tag = tag; this.children = []; this.value = ''; this.hidden = false; this.disabled = false; this.attributes = {}; this.handlers = {}; this.textContent = ''; this.style = {}; }
@@ -75,12 +75,24 @@ function fixture(savedLanguage = null, settings = {}) {
   context.AMap.convertFrom = (coords, type, done) => done('complete', { locations: [coords] });
   context.AMap.Marker = class { setPosition() {} setMap() {} };
   context.AMap.Circle = class { setCenter() {} setRadius() {} setOptions() {} setMap() {} };
+  context.navigator.userAgent = userAgent;
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
   if (!vm.runInContext('liveLocation', context)) vm.runInContext('initializeLiveLocation()', context);
   if (initialPanel === 'custom' && !localValues.has('xingtu-usage')) vm.runInContext("switchRoutePanel('custom', false); status(() => t('配置地图后，即可开始规划。'))", context);
   return { elements, pending, placePending, searches, geolocationPending, locationUpdates, scripts, storageWrites, sessionValues, localValues, pageHandlers, reloads: () => reloads, mode, modes: { custom: mode, current: currentRadio }, context, run: (code) => vm.runInContext(code, context), clears: () => clears };
 }
 const event = { preventDefault() {} };
+
+test('AMap entry opens only the app on iPhone, iPad and Android', () => {
+  for (const [userAgent, scheme] of [['iPhone', 'iosamap'], ['iPad', 'iosamap'], ['Macintosh', 'iosamap'], ['Android', 'androidamap'], ['Windows', 'iosamap']]) {
+    const f = fixture(null, { userAgent });
+    assert.equal(f.elements.get('open-amap').href, scheme + '://rootmap?sourceApplication=manmanhang');
+    assert.equal(f.elements.get('open-amap').onclick, undefined);
+  }
+  const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  assert.equal(html.match(/<a id="open-amap"[^>]*href="([^"]+)"/)[1], 'iosamap://rootmap?sourceApplication=manmanhang');
+});
+
 test('usage survives leaving and reopening with confirmed coordinates, stop order and both panels', () => {
   const f = fixture();
   f.elements.get('batch-addresses').value = '起点\n甲\n乙\n终点'; f.elements.get('batch-form').onsubmit(event);
