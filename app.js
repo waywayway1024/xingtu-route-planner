@@ -554,7 +554,12 @@ $('batch-form').onsubmit = (event) => {
   status(() => t('已导入 ') + names.length + t(' 个地址。点击各地址并选择候选地点，确认后再规划。'));
 };
 $('tour-places').addEventListener('input', () => { tourInputSnapshot = null; clearRoute(); });
-$('tour-objective').onchange = () => { $('objective').value = $('tour-objective').value; clearRoute(); };
+function changeObjective(value) {
+  $('objective').value = $('tour-objective').value = value;
+  document.querySelector('input[name="mode"][value="' + (value === 'walking-time' ? 'walking' : 'driving') + '"]').checked = true;
+  updateMultiOptions(); clearRoute();
+}
+$('tour-objective').onchange = () => changeObjective($('tour-objective').value);
 function queryTourPlaces(keyword) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -578,7 +583,7 @@ $('plan-tour').onclick = async () => {
   const names = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (names.length < 2 || names.length > 8) { status(() => t('请输入 2–8 个地址，每行一个；空行会自动忽略。'), true); return; }
   if (!loadedConfig) { openSettings(); return; }
-  if (mode() !== 'driving') { status(() => t('多地址自动排序目前支持驾车，请切换到驾车；其他方式可规划两点路线。'), true); return; }
+  if (!['driving', 'walking'].includes(mode())) { status(() => t('公交和骑行已关闭，请选择驾车、步行或打开地铁线路。'), true); return; }
   if (source === tourInputSnapshot && $('end-mode').value === 'auto') return $('route-form').onsubmit({ preventDefault() {} });
   $('end-mode').value = 'auto'; $('objective').value = $('tour-objective').value;
   importAddresses(names); tourInputSnapshot = source;
@@ -637,7 +642,7 @@ $('copy-order').onclick = async () => {
   catch { status(() => t('浏览器未允许复制，请选中推荐访问顺序后手动复制。'), true); }
 };
 $('end-mode').onchange = () => { clearRoute(); updateMultiOptions(); };
-$('objective').onchange = () => { $('tour-objective').value = $('objective').value; clearRoute(); };
+$('objective').onchange = () => changeObjective($('objective').value);
 document.addEventListener('click', (event) => { if (!event.target.closest('.location-field')) hideOptions(); });
 $('city').addEventListener('input', () => { tourInputSnapshot = null; hideOptions(); addressIds().forEach((id) => versions[id]++); clearRoute(); });
 $('swap').onclick = () => {
@@ -647,7 +652,8 @@ $('swap').onclick = () => {
   updateAddressState();
 };
 document.querySelectorAll('input[name="mode"]').forEach((input) => input.addEventListener('change', () => {
-  if (mode() !== 'driving' && !stops.length && $('end-mode').value === 'auto') { $('end-mode').value = 'fixed'; tourInputSnapshot = null; }
+  if (mode() === 'walking') $('objective').value = $('tour-objective').value = 'walking-time';
+  else if ($('objective').value === 'walking-time') $('objective').value = $('tour-objective').value = 'time';
   updateMultiOptions(); clearRoute();
 }));
 $('policy').onchange = clearRoute;
@@ -688,7 +694,7 @@ function queryRoute(service, origin, destination, waypoints = null) {
 }
 function ensureCurrent(request) { if (request !== routeVersion) throw new Error('地址或选项已改变，请重新规划。'); }
 function sameLocation(a, b) { return String(a) === String(b); }
-async function buildMatrix(points, policy, objective, request) {
+async function buildMatrix(points, policy, objective, request, travelMode) {
   const n = points.length;
   const matrix = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 0 : Infinity));
   const fixed = $('end-mode').value === 'fixed';
@@ -704,13 +710,28 @@ async function buildMatrix(points, policy, objective, request) {
     status(() => t('正在比较地址间的道路路线 ') + (k + 1) + '/' + pairs.length + '…');
     progress(() => t('比较道路路线 ') + (k + 1) + '/' + pairs.length, k / pairs.length * 90);
     if (sameLocation(points[i].location, points[j].location)) { matrix[i][j] = 0; continue; }
-    const data = await queryRoute(new AMap.Driving({ policy }), points[i].location, points[j].location);
+    const data = await queryRoute(travelMode === 'walking' ? new AMap.Walking() : new AMap.Driving({ policy }), points[i].location, points[j].location);
     ensureCurrent(request);
-    const values = (data?.routes || []).map((route) => Number(route[objective])).filter((value) => Number.isFinite(value) && value >= 0);
+    const values = (data?.routes || []).map((route) => Number(route[objective === 'distance' ? 'distance' : 'time'])).filter((value) => Number.isFinite(value) && value >= 0);
     if (values.length) matrix[i][j] = Math.min(...values);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return matrix;
+}
+async function queryWalkingTour(service, points, request) {
+  const route = { time: 0, distance: 0, steps: [] };
+  // Walking.search accepts two coordinates, so query each optimized leg separately.
+  for (let i = 1; i < points.length; i++) {
+    ensureCurrent(request);
+    if (sameLocation(points[i - 1].location, points[i].location)) continue;
+    const result = await queryRoute(service, points[i - 1].location, points[i].location);
+    ensureCurrent(request);
+    const leg = (result?.routes || []).filter(item => Number.isFinite(item.time) && item.time >= 0 && Number.isFinite(item.distance) && item.distance >= 0).sort((a, b) => a.time - b.time)[0];
+    if (!leg) throw new Error('未找到可用路线，请调整地点或出行方式。');
+    route.time += leg.time; route.distance += leg.distance; route.steps.push(...(leg.steps || []));
+    if (i < points.length - 1) await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  return { routes: [route] };
 }
 async function planRoute(event, fromCurrent = false) {
   event.preventDefault();
@@ -723,7 +744,6 @@ async function planRoute(event, fromCurrent = false) {
   if (!['driving', 'walking'].includes(travelMode)) { status(() => t('公交和骑行已关闭，请选择驾车、步行或打开地铁线路。'), true); return; }
   if (fromCurrent && !position) { status(() => t('请先获取有效的当前位置，再规划路线。'), true); $('current-locate').focus(); return; }
   if (fromCurrent && !currentDestination) { searchCurrentDestination(); $('current-destination').focus(); status(() => t('请从候选地点中确认目的地的准确位置。'), true); return; }
-  if (!fromCurrent && (stops.length || $('end-mode').value === 'auto') && travelMode !== 'driving') { status(() => t('多地址自动排序目前支持驾车，请切换到驾车；其他方式可规划两点路线。'), true); return; }
   for (const id of fromCurrent ? [] : addressIds()) {
     if (!selected[id]) { $('address-details').open = true; searchPlaces(id); $(id).focus(); status(() => t('请从候选地点中确认每一个地址的准确位置。'), true); return; }
   }
@@ -743,24 +763,25 @@ async function planRoute(event, fromCurrent = false) {
     const policy = multi ? (objective === 'distance' ? 2 : 0) : Number($(fromCurrent ? 'current-policy' : 'policy').value);
     let optimized, baseline;
     if (multi) {
-      const matrix = await buildMatrix(points, policy, objective, request);
+      const matrix = await buildMatrix(points, policy, objective, request, travelMode);
       ensureCurrent(request);
       optimized = auto ? window.RouteOptimizer.optimizeTourRoute(matrix) : window.RouteOptimizer.optimizeRoute(matrix, $('end-mode').value === 'fixed');
-      if (!optimized) throw new Error('这些地址无法组成全部可达的驾车路线，请调整地址。');
+      if (!optimized) throw new Error(travelMode === 'walking' ? '这些地址无法组成全部可达的步行路线，请调整地址。' : '这些地址无法组成全部可达的驾车路线，请调整地址。');
       baseline = points.slice(1).reduce((sum, _, i) => sum + matrix[i][i + 1], 0);
       points = optimized.order.map((index) => points[index]);
       status(() => t('访问顺序已优化，正在生成完整路线…'));
       progress(() => t('正在生成完整路线…'), 95);
     }
     if (travelMode === 'driving') planner = new AMap.Driving({ ...options, policy });
-    if (travelMode === 'walking') planner = new AMap.Walking(options);
+    if (travelMode === 'walking') planner = new AMap.Walking(multi ? {} : options);
     activePlanner = planner;
-    const result = await queryRoute(activePlanner, points[0].location, points.at(-1).location, points.length > 2 ? points.slice(1, -1).map((point) => point.location) : null);
+    const result = travelMode === 'walking' && multi ? await queryWalkingTour(activePlanner, points, request) : await queryRoute(activePlanner, points[0].location, points.at(-1).location, points.length > 2 ? points.slice(1, -1).map((point) => point.location) : null);
     ensureCurrent(request);
     const routes = result?.routes || result?.plans;
     if (!routes?.length) throw new Error('未找到可用路线，请调整地点或出行方式。');
     const route = routes[0];
     lastRoute = { route: { time: route.time, distance: route.distance }, points: points.map(memoryPoint), multi, baseline: Number.isFinite(baseline) ? baseline : null, optimized: optimized ? { cost: optimized.cost } : null, objective, ...routeGeometry(route) };
+    if (travelMode === 'walking' && multi) { drawSavedRoute(); map.setFitView?.(savedRouteOverlays); renderRouteInstructions(); }
     renderOrder = () => renderRouteSummary({ route, points, multi, baseline, optimized, objective });
     renderOrder();
     rememberUsage();
@@ -787,8 +808,8 @@ function renderRouteSummary({ route, points, multi, baseline, optimized, objecti
         $('order-list').append(item);
       });
       const saving = Number.isFinite(baseline) ? Math.max(0, baseline - optimized.cost) : null;
-      const comparison = saving === null ? t('原输入顺序存在不可达路段。') : saving < 1 ? t('原输入顺序已达到同等结果。') : t('相比输入顺序，分段估算减少 ') + (objective === 'time' ? (saving < 60 ? Math.round(saving) + t(' 秒') : duration(saving)) : (saving < 1000 ? Math.round(saving) + t(' 米') : (saving / 1000).toFixed(1) + t(' 公里'))) + t('。');
-      writeText('optimization-note', () => comparison + t(' 按本次道路查询的分段') + (objective === 'time' ? t('耗时') : t('距离')) + t('选出最优顺序；完整路线以地图结果为准，实时路况可能变化。'));
+      const comparison = saving === null ? t('原输入顺序存在不可达路段。') : saving < 1 ? t('原输入顺序已达到同等结果。') : t('相比输入顺序，分段估算减少 ') + (objective !== 'distance' ? (saving < 60 ? Math.round(saving) + t(' 秒') : duration(saving)) : (saving < 1000 ? Math.round(saving) + t(' 米') : (saving / 1000).toFixed(1) + t(' 公里'))) + t('。');
+      writeText('optimization-note', () => comparison + t(' 按本次道路查询的分段') + (objective !== 'distance' ? t('耗时') : t('距离')) + t('选出最优顺序；完整路线以地图结果为准，实时路况可能变化。'));
       $('visit-order').hidden = false;
       recommendedPoints = points.slice();
       copiedItinerary = t('manmanhang · 推荐行程\n') + points.map((point, i) => (i + 1) + '. ' + pointName(point) + (typeof point.address === 'string' && point.address ? t('（') + point.address + t('）') : '')).join('\n') + t('\n预计 ') + $('duration').textContent + ' · ' + $('distance').textContent + '\n' + comparison + t('\n预计耗时仅供参考，请以实际路况为准。');
@@ -849,7 +870,7 @@ function saveUsage() {
   } catch { writeText('memory-status', () => t('无法保存使用数据，请允许浏览器存储或释放存储空间。')); }
 }
 function validSavedRoute(route) {
-  return route && Number.isFinite(route.route?.time) && route.route.time >= 0 && Number.isFinite(route.route?.distance) && route.route.distance >= 0 && Array.isArray(route.points) && route.points.length >= 2 && route.points.length <= 8 && route.points.every(memoryPoint) && typeof route.multi === 'boolean' && (!route.multi || Number.isFinite(route.optimized?.cost)) && ['time', 'distance'].includes(route.objective) && (route.baseline === null || Number.isFinite(route.baseline)) && Array.isArray(route.paths) && route.paths.every(path => Array.isArray(path) && path.every(coordinates)) && Array.isArray(route.instructions) && route.instructions.every(text => typeof text === 'string');
+  return route && Number.isFinite(route.route?.time) && route.route.time >= 0 && Number.isFinite(route.route?.distance) && route.route.distance >= 0 && Array.isArray(route.points) && route.points.length >= 2 && route.points.length <= 8 && route.points.every(memoryPoint) && typeof route.multi === 'boolean' && (!route.multi || Number.isFinite(route.optimized?.cost)) && ['time', 'distance', 'walking-time'].includes(route.objective) && (route.baseline === null || Number.isFinite(route.baseline)) && Array.isArray(route.paths) && route.paths.every(path => Array.isArray(path) && path.every(coordinates)) && Array.isArray(route.instructions) && route.instructions.every(text => typeof text === 'string');
 }
 function restoreUsage() {
   // Restore before enabling saves, so startup cannot overwrite the previous session.
@@ -861,7 +882,7 @@ function restoreUsage() {
     importAddresses(data.addresses.map(item => item.text));
     addressIds().forEach((id, i) => { selected[id] = memoryPoint(data.addresses[i].point); if (selected[id]?.currentLocation) { selected[id].savedLocation = true; $(id).value = pointName(selected[id]); } });
     for (const id of Object.keys(memoryDefaults)) if (typeof data.fields[id] === 'string') $(id).value = data.fields[id];
-    for (const [id, allowed] of Object.entries({ 'end-mode': ['fixed', 'free', 'auto'], objective: ['time', 'distance'], 'tour-objective': ['time', 'distance'], policy: ['0', '1', '2', '4'], 'current-policy': ['0', '1', '2', '4'] })) if (!allowed.includes($(id).value)) $(id).value = memoryDefaults[id];
+    for (const [id, allowed] of Object.entries({ 'end-mode': ['fixed', 'free', 'auto'], objective: ['time', 'distance', 'walking-time'], 'tour-objective': ['time', 'distance', 'walking-time'], policy: ['0', '1', '2', '4'], 'current-policy': ['0', '1', '2', '4'] })) if (!allowed.includes($(id).value)) $(id).value = memoryDefaults[id];
     for (const [name, value] of [['mode', data.modes.custom], ['current-mode', data.modes.current]]) { const input = document.querySelector('input[name="' + name + '"][value="' + (['driving', 'walking'].includes(value) ? value : 'driving') + '"]'); if (input) input.checked = true; }
     currentDestination = memoryPoint(data.currentDestination);
     tourInputSnapshot = typeof data.tourInputSnapshot === 'string' ? data.tourInputSnapshot : null;
@@ -873,12 +894,15 @@ function restoreUsage() {
       lastRoute.points.forEach(point => { if (point.currentLocation) point.savedLocation = true; });
       renderOrder = () => renderRouteSummary({ ...lastRoute, baseline: lastRoute.baseline === null ? Infinity : lastRoute.baseline });
       renderOrder(); $('saved-route-note').hidden = false;
-      const details = document.createElement('ol');
-      lastRoute.instructions.forEach(text => { const item = document.createElement('li'); item.textContent = text; details.append(item); });
-      $('route-panel').append(details);
+      renderRouteInstructions();
     }
     writeText('memory-status', () => '');
   } catch { writeText('memory-status', () => t('保存的使用数据无法恢复，请手动清除后重新开始。')); }
+}
+function renderRouteInstructions() {
+  const details = document.createElement('ol');
+  lastRoute.instructions.forEach(text => { const item = document.createElement('li'); item.textContent = text; details.append(item); });
+  $('route-panel').append(details);
 }
 function drawSavedRoute() {
   if (!lastRoute || !map) return;

@@ -74,6 +74,7 @@ function fixture(savedLanguage = null, settings = {}) {
   context.window.LOCATION_TEST_ENV = { document: doc, isSecureContext: true, navigator: { geolocation: { watchPosition(success, failure) { geolocationPending.push((status, result) => { const coords = String(result?.position || '').split(',').map(Number); if (status === 'complete' && coords.length === 2 && coords.every(Number.isFinite)) success({ coords: { longitude: coords[0], latitude: coords[1], accuracy: result.accuracy ?? 12 }, timestamp: Date.now() }); else failure({ code: (result?.info || result?.message) === 'PERMISSION_DENIED' ? 1 : 2 }); }); return geolocationPending.length; }, clearWatch() {} } }, setTimeout, clearTimeout, setInterval(fn, delay) { const timer = setInterval(fn, delay); timer.unref(); return timer; }, clearInterval, addEventListener() {}, removeEventListener() {} };
   context.AMap.convertFrom = (coords, type, done) => done('complete', { locations: [coords] });
   context.AMap.Marker = class { setPosition() {} setMap() {} };
+  context.AMap.Polyline = class { setMap() {} };
   context.AMap.Circle = class { setCenter() {} setRadius() {} setOptions() {} setMap() {} };
   context.navigator.userAgent = userAgent;
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8'), context);
@@ -463,11 +464,11 @@ test('auto tour validates input and mode before replacing addresses', async () =
     assert.equal(f.elements.get('start').value, '原起点');
     assert.match(f.elements.get('status').textContent, /2–8/);
   }
-  f.run('loadedConfig = true'); f.mode.value = 'walking';
+  f.run('loadedConfig = true'); f.mode.value = 'riding';
   f.elements.get('tour-places').value = '甲\n乙';
   await f.elements.get('plan-tour').onclick();
   assert.equal(f.placePending.length, 0);
-  assert.match(f.elements.get('status').textContent, /驾车/);
+  assert.match(f.elements.get('status').textContent, /公交和骑行已关闭/);
 });
 
 test('unique exact places automatically choose both endpoints and produce a full route', async () => {
@@ -577,6 +578,134 @@ test('distance preference selects the correct road policy and cost', async () =>
   f.pending.shift()('complete', { routes: [{ time: 20, distance: 10 }] });
   await task;
   assert.ok(f.searches.every(({ options }) => options.policy === 2));
+});
+
+test('walking time preference synchronizes custom controls and preserves the current panel mode', () => {
+  const f = fixture();
+  const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  for (const id of ['tour-objective', 'objective']) {
+    assert.match(html.match(new RegExp('<select id="' + id + '">([\\s\\S]*?)</select>'))[1], /<option value="walking-time">步行时间最少<\/option>/);
+    f.elements.get(id).value = 'walking-time'; f.elements.get(id).onchange();
+    assert.equal(f.elements.get('tour-objective').value, 'walking-time');
+    assert.equal(f.elements.get('objective').value, 'walking-time');
+    assert.equal(f.mode.value, 'walking');
+    assert.equal(f.modes.current.value, 'driving');
+    assert.equal(f.elements.get('policy-field').hidden, true);
+    f.elements.get(id).value = 'distance'; f.elements.get(id).onchange();
+    assert.equal(f.mode.value, 'driving');
+  }
+  f.mode.value = 'walking'; f.mode.handlers.change();
+  assert.equal(f.elements.get('tour-objective').value, 'walking-time');
+  f.mode.value = 'driving'; f.mode.handlers.change();
+  assert.equal(f.elements.get('tour-objective').value, 'time');
+  assert.equal(f.run("t('步行时间最少')"), '步行时间最少');
+  f.elements.get('language-toggle').onclick();
+  assert.equal(f.run("t('步行时间最少')"), 'Least walking time');
+});
+
+function walkingTourFixture(endMode = 'auto') {
+  const f = fixture();
+  f.elements.get('batch-addresses').value = '甲\n乙\n丙'; f.elements.get('batch-form').onsubmit(event);
+  f.elements.get('end-mode').value = endMode;
+  f.elements.get('tour-objective').value = 'walking-time'; f.elements.get('tour-objective').onchange();
+  f.run("loadedConfig = true; map = {}; addressIds().forEach((id, i) => selected[id] = {name: ['甲', '乙', '丙'][i], location: [116 + i / 100, 39]})");
+  return f;
+}
+
+async function settleWalkingTour(f, task) {
+  const matrix = [[0, 50, 1], [1, 0, 50], [50, 50, 0]];
+  while (f.run('busy')) {
+    assert.equal(f.pending.length, 1);
+    const { args } = f.searches.at(-1);
+    const from = Math.round((args[0][0] - 116) * 100), to = Math.round((args[1][0] - 116) * 100);
+    const time = matrix[from][to], distance = 1000 - time * 5;
+    f.pending.shift()('complete', { routes: [
+      { time: time + 100, distance: 1, steps: [{ instruction: '较慢路线', path: [args[0], args[1]] }] },
+      { time, distance, steps: [{ instruction: from + '走到' + to, path: [args[0], args[1]] }] }
+    ] });
+    await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  await task;
+}
+
+test('the walking preference plans an automatic tour from the sightseeing entry', async () => {
+  const f = fixture(); f.run('loadedConfig = true; map = {}');
+  f.elements.get('tour-places').value = '甲\n乙\n丙';
+  f.elements.get('tour-objective').value = 'walking-time'; f.elements.get('tour-objective').onchange();
+  const task = f.elements.get('plan-tour').onclick();
+  for (let i = 0; i < 3; i++) {
+    const { keyword, callback } = f.placePending.shift();
+    callback('complete', { poiList: { count: 1, pois: [{ name: keyword, location: [116 + i / 100, 39] }] } });
+    await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  await settleWalkingTour(f, task);
+  assert.equal(f.elements.get('end-mode').value, 'auto');
+  assert.deepEqual(Array.from(f.run('lastRoute.points.map(point => point.name)')), ['乙', '甲', '丙']);
+  assert.ok(f.searches.every(search => search.type === 'walking'));
+  assert.equal(f.elements.get('plan-tour').disabled, false);
+});
+
+for (const [endMode, expected] of [['fixed', ['甲', '乙', '丙']], ['free', ['甲', '丙', '乙']], ['auto', ['乙', '甲', '丙']]]) {
+  test('walking time optimization respects ' + endMode + ' endpoints and draws every leg', async () => {
+    const f = walkingTourFixture(endMode), paths = [], markers = [], fitViews = [];
+    f.context.AMap.Polyline = class { constructor(options) { paths.push(options.path); } setMap() {} };
+    f.context.AMap.Marker = class { constructor(options) { markers.push(options.title); } setMap() {} };
+    f.context.fitWalkingView = (...args) => fitViews.push(args);
+    f.run('map.setFitView = fitWalkingView');
+    const task = f.elements.get('route-form').onsubmit(event);
+    await settleWalkingTour(f, task);
+    assert.ok(f.searches.every(search => search.type === 'walking' && search.args.length === 2 && !search.options?.map));
+    assert.deepEqual(Array.from(f.run('lastRoute.points.map(point => point.name)')), expected);
+    assert.equal(f.run('lastRoute.objective'), 'walking-time');
+    assert.equal(paths.length, 2); assert.deepEqual(markers, expected); assert.equal(fitViews.length, 1);
+    assert.equal(f.run('lastRoute.instructions.length'), 2);
+    assert.equal(f.elements.get('route-panel').children[0].children.length, 2);
+    assert.doesNotMatch(f.elements.get('route-panel').children[0].children.map(item => item.textContent).join(' '), /较慢路线/);
+    if (endMode === 'auto') {
+      assert.equal(f.run('lastRoute.route.time'), 2);
+      assert.equal(f.run('lastRoute.route.distance'), 1990);
+      assert.equal(f.run('lastRoute.optimized.cost'), 2);
+    }
+    f.pageHandlers.pagehide.forEach(callback => callback());
+    const reopened = fixture(null, { localValues: f.localValues });
+    assert.equal(reopened.elements.get('tour-objective').value, 'walking-time');
+    assert.equal(reopened.mode.value, 'walking');
+    assert.equal(reopened.elements.get('summary').hidden, false);
+    assert.equal(reopened.run('lastRoute.paths.length'), 2);
+    assert.deepEqual(Array.from(reopened.run('lastRoute.points.map(point => point.name)')), expected);
+    assert.equal(reopened.pending.length, 0);
+  });
+}
+
+test('unreachable walking tours report a walking error without falling back to driving', async () => {
+  const f = walkingTourFixture('fixed');
+  const task = f.elements.get('route-form').onsubmit(event);
+  while (f.run('busy')) {
+    f.pending.shift()('no_data', {});
+    await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  await task;
+  assert.ok(f.searches.every(search => search.type === 'walking'));
+  assert.match(f.elements.get('status').textContent, /无法组成全部可达的步行路线/);
+  assert.equal(f.elements.get('summary').hidden, true);
+});
+
+test('cancelling final walking legs rejects late results and releases planning controls', async () => {
+  const f = walkingTourFixture('fixed');
+  const task = f.elements.get('route-form').onsubmit(event);
+  for (let i = 0; i < 2; i++) {
+    f.pending.shift()('complete', { routes: [{ time: 60, distance: 100 }] });
+    await new Promise(resolve => setTimeout(resolve, 270));
+  }
+  const late = f.pending.shift();
+  f.elements.get('cancel-plan').onclick();
+  late('complete', { routes: [{ time: 60, distance: 100 }] });
+  await task;
+  assert.equal(f.run('lastRoute'), null);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.elements.get('summary').hidden, true);
+  assert.equal(f.elements.get('plan').disabled, false);
+  assert.match(f.elements.get('status').textContent, /计算已取消/);
 });
 
 test('place search service error releases the buttons without starting road queries', async () => {
@@ -851,30 +980,33 @@ for (const action of ['add', 'remove']) {
 }
 
 for (const travelMode of ['walking']) {
-  test('switching a completed two-point auto tour to ' + travelMode + ' enables the legacy two-point route', async () => {
+  test('switching a completed two-point auto tour to ' + travelMode + ' keeps automatic endpoints', async () => {
     const f = confirmedPair(); await completeAutoTour(f);
+    f.run('addressIds().forEach((id, i) => selected[id].location = [116 + i / 100, 39])');
     f.mode.value = travelMode; f.mode.handlers.change();
-    assert.equal(f.elements.get('end-mode').value, 'fixed');
-    assert.equal(f.elements.get('swap').hidden, false);
-    assert.equal(f.elements.get('locate').hidden, false);
+    assert.equal(f.elements.get('end-mode').value, 'auto');
+    assert.equal(f.elements.get('swap').hidden, true);
+    assert.equal(f.elements.get('locate').hidden, true);
     const previousQueries = f.searches.length;
     const task = f.elements.get('route-form').onsubmit(event);
     assert.equal(f.searches.length, previousQueries + 1);
     assert.equal(f.searches.at(-1).type, travelMode);
-    f.pending.shift()('complete', travelMode === 'transfer' ? { plans: [{ time: 60, distance: 100 }] } : { routes: [{ time: 60, distance: 100 }] });
-    await task;
+    await settleRoads(f, task);
+    assert.ok(f.searches.slice(previousQueries).every(search => search.type === travelMode && search.args.length === 2));
     assert.equal(f.elements.get('summary').hidden, false);
   });
 }
 
-test('switching a three-point auto tour to walking keeps its constraints and explains the unsupported mode', async () => {
+test('switching a three-point auto tour to walking keeps its constraints and plans all stops', async () => {
   const f = confirmedPair(); f.elements.get('add-stop').onclick();
   f.run("selected['stop-1'] = {name: '中途地点', location: '118,39'}");
   f.elements.get('end-mode').value = 'auto'; f.mode.value = 'walking'; f.mode.handlers.change();
   assert.equal(f.elements.get('end-mode').value, 'auto');
-  await f.elements.get('route-form').onsubmit(event);
-  assert.equal(f.searches.length, 0);
-  assert.match(f.elements.get('status').textContent, /多地址自动排序目前支持驾车/);
+  const task = f.elements.get('route-form').onsubmit(event);
+  await settleRoads(f, task);
+  assert.ok(f.searches.every(search => search.type === 'walking' && search.args.length === 2));
+  assert.equal(f.elements.get('order-list').children.length, 3);
+  assert.equal(f.elements.get('summary').hidden, false);
 });
 
 for (const endpointMode of ['fixed', 'auto']) {

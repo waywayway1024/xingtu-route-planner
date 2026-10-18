@@ -149,9 +149,9 @@
           <label for="tour-places">游玩地点</label>
           <textarea id="tour-places" rows="5" placeholder="天坛公园&#10;颐和园&#10;故宫博物院&#10;北海公园" aria-describedby="tour-hint"></textarea>
           <label for="tour-objective">路线偏好</label>
-          <select id="tour-objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option></select>
+          <select id="tour-objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option><option value="walking-time">步行时间最少</option></select>
           <button id="plan-tour" type="button" class="button primary">自动安排游玩路线 →</button>
-          <small id="tour-hint">按实际驾车路线比较。耗时不含景点游玩时间，也不考虑营业时间；同名地点需要确认。</small>
+          <small id="tour-hint">按所选出行方式的实际路线比较。耗时不含景点游玩时间，也不考虑营业时间；同名地点需要确认。</small>
         </section>
         <details id="address-details"><summary>手动输入或确认地点</summary>
         <div class="locations">
@@ -163,8 +163,8 @@
         <div class="address-actions"><button id="add-stop" type="button" class="text-button">＋ 添加地址</button><button id="open-batch" type="button" class="text-button">批量输入</button><span id="address-count" data-dynamic class="address-count" aria-live="polite"></span></div>
         <section id="optimization-options" class="optimization-options" hidden>
           <label for="end-mode">起终点安排</label><select id="end-mode"><option value="fixed">固定终点，自动安排中间地址</option><option value="free">最后一站不限，全部地址自动排序</option><option value="auto">起点、终点都自动安排</option></select>
-          <label for="objective">优化目标</label><select id="objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option></select>
-          <p>最多 8 个地址（含起点）。多地址优化仅支持驾车，按实际道路查询比较访问顺序。</p>
+          <label for="objective">优化目标</label><select id="objective"><option value="time">总驾车耗时更少</option><option value="distance">总驾车距离更短</option><option value="walking-time">步行时间最少</option></select>
+          <p>最多 8 个地址（含起点）。多地址优化支持驾车和步行，按实际道路查询比较访问顺序。</p>
         </section>
         <button id="locate" type="button" class="text-button">◎ 使用我的位置作为起点</button>
         </details>
