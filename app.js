@@ -259,7 +259,9 @@ const memoryDefaults = { city: config.defaultCity || '北京', 'tour-places': ''
 function status(message, error = false) { writeText('status', () => typeof message === 'function' ? message() : t(message)); $('status').classList.toggle('error', error); }
 function mode() { return document.querySelector('input[name="mode"]:checked').value; }
 function hideOptions() {
+  const keepLocationStart = pendingLocationStart !== null && pendingLocationStart === versions.start;
   addressIds().forEach((id) => { $(id + '-options').hidden = true; versions[id]++; clearTimeout(addressTimers.get(id)); });
+  if (keepLocationStart) pendingLocationStart = versions.start;
   addressTimers.clear(); addressSearches.clear();
   $('current-destination-options').hidden = true; currentDestinationVersion++; currentDestinationSearch = null; clearTimeout(currentDestinationTimer);
 }

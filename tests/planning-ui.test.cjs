@@ -1256,7 +1256,23 @@ test('use as start snapshots the current location without automatically moving t
 });
 test('a delayed location cannot overwrite a manually changed start', () => {
   const f = liveFixture(); f.elements.get('locate').onclick(); assert.equal(f.starts(), 1); assert.equal(f.elements.get('locate').disabled, true);
-  f.run("versions.start++; selected.start = {name:'手动选择', location:'manual'}"); f.emitPosition(); assert.equal(f.run('selected.start.location'), 'manual'); assert.equal(f.elements.get('locate').disabled, false);
+  f.run("versions.start++; selected.start = {name:'手动选择', location:'manual'}");
+  f.context.document.handlers.click({ target: { closest: () => null } });
+  f.emitPosition(); assert.equal(f.run('selected.start.location'), 'manual'); assert.equal(f.elements.get('locate').disabled, false);
+});
+
+test('a bubbling locate click and outside clicks preserve an unchanged pending GPS start', () => {
+  const f = liveFixture();
+  f.run("selected.start = { name: '旧起点', location: 'old' }; $('start').value = '旧起点'");
+  f.elements.get('start-options').hidden = false;
+  f.elements.get('locate').onclick();
+  const clickOutside = () => f.context.document.handlers.click({ target: { closest: () => null } });
+  clickOutside(); clickOutside();
+  assert.equal(f.elements.get('start-options').hidden, true);
+  f.emitPosition([121, 31]);
+  assert.equal(f.elements.get('start').value, '我的位置');
+  assert.deepEqual(f.run('selected.start.location'), [121, 31]);
+  assert.equal(f.elements.get('locate').disabled, false);
 });
 test('a heading received before GPS appears on the first marker and stop removes both overlays', () => {
   const f = liveFixture(); Object.assign(f.state, { directionState: 'active', directionEnabled: true, heading: 90 }); f.emitPosition();

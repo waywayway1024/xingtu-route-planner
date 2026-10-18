@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { createGzip } from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import worker from './worker.mjs';
 
@@ -24,12 +25,21 @@ export function createSiteServer(env) {
         if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
       }
       const result = await worker.fetch(new Request(url, { method: request.method, headers }), env);
+      const textAsset = result.status === 200 && !url.pathname.startsWith('/_AMapService/') && url.pathname !== '/site-config.js' && /^text\/(html|css|javascript)\b/.test(result.headers.get('Content-Type') || '');
+      if (textAsset) result.headers.append('Vary', 'Accept-Encoding');
+      const gzip = textAsset && (request.headers['accept-encoding'] || '').split(',').some(value => {
+        const [encoding, quality = '1'] = value.trim().toLowerCase().split(/\s*;\s*q=/);
+        return encoding === 'gzip' && Number(quality) > 0 && Number(quality) <= 1;
+      });
+      if (gzip) { result.headers.set('Content-Encoding', 'gzip'); result.headers.delete('Content-Length'); }
       response.writeHead(result.status, Object.fromEntries(result.headers));
       if (request.method === 'HEAD' || !result.body) {
         await result.body?.cancel();
         response.end();
       } else {
-        await pipeline(Readable.fromWeb(result.body), response);
+        const body = Readable.fromWeb(result.body);
+        if (gzip) await pipeline(body, createGzip(), response);
+        else await pipeline(body, response);
       }
     } catch {
       if (response.headersSent) response.destroy();

@@ -12,14 +12,14 @@
       const script = target.document.createElement('script');
       const finish = error => {
         clearTimeout(timer); delete target.manmanhangMetroReady;
-        if (error) { script.remove(); sdkPromise = null; reject(error); } else resolve();
+        if (error) { script.remove(); reject(error); } else resolve();
       };
       const timer = setTimeout(() => finish(new Error('地铁图加载失败，请检查网络后重试。')), 20000);
       target.manmanhangMetroReady = () => finish(typeof target.subway === 'function' ? null : new Error('地铁图加载失败，请检查网络后重试。'));
       script.src = 'https://webapi.amap.com/subway?' + new URLSearchParams({ v: '1.0', key, callback: 'manmanhangMetroReady' });
       script.onerror = () => finish(new Error('地铁图加载失败，请检查网络后重试。'));
       target.document.head.append(script);
-    });
+    }).finally(() => { sdkPromise = null; });
     return sdkPromise;
   }
   function create(options) {
@@ -218,11 +218,15 @@
           for (const [code, info] of entries) { const option = document.createElement('option'); option.value = code; option.textContent = info.name; $('metro-city').append(option); }
         }
         const frame = $('metro-frame');
-        if (frame.contentDocument?.readyState !== 'complete') await new Promise((resolve, reject) => {
-          const loaded = () => { clearTimeout(timer); resolve(); };
+        if (frame.contentDocument?.readyState !== 'complete' || !frame.contentDocument?.getElementById('metro-canvas')) await new Promise((resolve, reject) => {
+          const loaded = () => {
+            if (frame.contentDocument?.readyState !== 'complete' || !frame.contentDocument?.getElementById('metro-canvas')) return;
+            clearTimeout(timer); frame.removeEventListener('load', loaded); resolve();
+          };
           const timer = setTimeout(() => { frame.removeEventListener('load', loaded); reject(new Error('frame timeout')); }, 20000);
-          frame.addEventListener('load', loaded, { once: true });
+          frame.addEventListener('load', loaded);
         });
+        if (token !== opening || !dialog.open) return;
         await loadSDK(options.getConfig().key, frame.contentWindow);
         if (token !== opening || !dialog.open) return;
         if (cities[city]) showCity(city); else if (!city) { manualCity = false; await identify(); }

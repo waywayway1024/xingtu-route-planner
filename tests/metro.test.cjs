@@ -166,6 +166,43 @@ test('a stalled embedded map page times out and remains closable', async () => {
   f.$('metro-close').onclick(); assert.equal(f.$('metro-dialog').open, false);
 });
 
+test('an initial blank iframe marked complete waits for the real metro canvas', async () => {
+  const f = fixture({ position: false }), frame = f.$('metro-frame'), loadedDocument = frame.contentDocument;
+  frame.contentDocument = { readyState: 'complete', getElementById() { return null; } };
+  const task = f.controller.open(); await settle();
+  assert.equal(typeof frame.handlers.load, 'function');
+  frame.handlers.load(); await settle();
+  assert.equal(f.locationRequests, 0);
+  frame.contentDocument = loadedDocument; frame.handlers.load(); await task;
+  assert.equal(f.$('metro-city').disabled, false);
+  f.$('metro-city').value = '1100'; f.$('metro-city').onchange();
+  assert.equal(f.views.length, 1);
+});
+
+test('the metro SDK reloads when navigation removes a previously loaded SDK', async () => {
+  const f = fixture({ position: false }), target = f.$('metro-frame').contentWindow, subway = target.subway;
+  let injections = 0;
+  target.document.head.append = () => { injections++; target.subway = subway; target.manmanhangMetroReady(); };
+  delete target.subway; await f.controller.open();
+  assert.equal(injections, 1);
+  f.$('metro-close').onclick(); delete target.subway;
+  await f.controller.open();
+  assert.equal(injections, 2);
+  assert.equal(f.$('metro-city').disabled, false);
+});
+
+test('a metro window closed while its iframe loads does not start an SDK request', async () => {
+  const f = fixture(), frame = f.$('metro-frame'), loadedDocument = frame.contentDocument;
+  let injections = 0;
+  delete frame.contentWindow.subway; frame.contentWindow.document.head.append = () => { injections++; };
+  frame.contentDocument = { readyState: 'complete', getElementById() { return null; } };
+  const task = f.controller.open(); await settle();
+  assert.equal(typeof frame.handlers.load, 'function');
+  f.$('metro-close').onclick(); frame.contentDocument = loadedDocument; frame.handlers.load(); await task;
+  assert.equal(injections, 0);
+  assert.equal(f.views.length, 0);
+});
+
 const plannedData = { count: '1', buslist: [{ spoi: { id: 'pa' }, epoi: { id: 'pb' }, expense: '3', expensetime: '900', segmentlist: [
   { bustype: '2', startname: '甲站', endname: '换乘站', busname: '地铁1号线' },
   { bustype: '2', startname: '换乘站', endname: '乙站', busname: '地铁2号线' }

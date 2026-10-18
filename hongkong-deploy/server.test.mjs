@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { get } from 'node:http';
+import { gunzipSync } from 'node:zlib';
 import { createSiteServer } from './out/server.mjs';
 
 function requestWithHeaders(url, headers) {
@@ -48,16 +49,54 @@ test('Hong Kong adapter preserves pages, HTTPS origin and map proxy restrictions
     return new Response('callback({"status":"1"})', { headers: { 'Content-Type': 'application/json' } });
   };
   try {
-    const proxy = await requestWithHeaders(`${base}/_AMapService/v3/place/text?key=wrong&jscode=wrong&callback=callback`, { Host: 'example.com', 'X-Forwarded-Proto': 'https', Referer: 'https://example.com/' });
+    const proxy = await requestWithHeaders(`${base}/_AMapService/v3/place/text?key=wrong&jscode=wrong&callback=callback`, { Host: 'example.com', 'X-Forwarded-Proto': 'https', Referer: 'https://example.com/', 'Accept-Encoding': 'gzip' });
     assert.equal(proxy.status, 200);
     assert.equal(proxy.headers.get('content-type'), 'text/javascript; charset=utf-8');
     assert.equal(proxy.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(proxy.headers.get('content-encoding'), null);
     assert.match(await proxy.text(), /^callback\(/);
     assert.equal(upstream.hostname, 'restapi.amap.com');
     assert.equal(upstream.searchParams.get('key'), 'test-public-key');
     assert.equal(upstream.searchParams.get('jscode'), 'test-private-code');
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('gzip compresses static pages, scripts and styles without changing their content', async t => {
+  const server = createSiteServer({}); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const name of ['/', '/app.js', '/styles.css', '/metro.js']) {
+    const plain = await requestWithHeaders(base + name, { 'Accept-Encoding': 'identity' });
+    const packed = await requestWithHeaders(base + name, { 'Accept-Encoding': 'br, gzip' });
+    const original = Buffer.from(await plain.arrayBuffer()), compressed = Buffer.from(await packed.arrayBuffer());
+    assert.equal(packed.headers.get('content-encoding'), 'gzip');
+    assert.equal(packed.headers.get('vary'), 'Accept-Encoding');
+    assert.equal(packed.headers.get('cache-control'), plain.headers.get('cache-control'));
+    assert.deepEqual(gunzipSync(compressed), original);
+    assert.ok(compressed.length < original.length);
+  }
+  const head = await fetch(base + '/app.js', { method: 'HEAD', headers: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(head.headers.get('content-encoding'), 'gzip'); assert.equal(await head.text(), '');
+});
+
+test('compression respects gzip refusal and leaves images, runtime config and version checks unchanged', async t => {
+  const server = createSiteServer({}); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const accept of ['identity', 'br', 'gzip;q=0', 'gzip;q=0.000, br', 'x-gzip']) {
+    const response = await requestWithHeaders(base + '/app.js', { 'Accept-Encoding': accept });
+    assert.equal(response.headers.get('content-encoding'), null, accept);
+    assert.match(await response.text(), /use strict/);
+  }
+  const accepted = await requestWithHeaders(base + '/app.js', { 'Accept-Encoding': 'br, GZIP ; q=0.5' });
+  assert.equal(accepted.headers.get('content-encoding'), 'gzip'); await accepted.arrayBuffer();
+  for (const name of ['/icon-192.png', '/site-config.js', '/app-version.json']) {
+    const response = await requestWithHeaders(base + name, { 'Accept-Encoding': 'gzip' });
+    assert.equal(response.headers.get('content-encoding'), null, name);
+    if (name !== '/icon-192.png') assert.equal(response.headers.get('cache-control'), 'no-store');
+    await response.arrayBuffer();
   }
 });
 
