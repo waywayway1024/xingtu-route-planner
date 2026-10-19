@@ -92,7 +92,7 @@ window.I18n = (() => {
   "◎ 定位我": "◎ Locate me",
   "精度约 ": "Accuracy about ",
   "精度 —": "Accuracy —",
-  "点击“定位我”允许使用方向。": "Tap Locate me to allow heading access.",
+  "点击页面任意位置允许使用方向。": "Tap anywhere on the page to allow heading access.",
   "回到位置": "Recenter",
   "定位尚未开启": "Location is off",
   "正在获取位置，请允许浏览器定位…": "Getting your position. Allow location access…",

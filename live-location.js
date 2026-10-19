@@ -217,12 +217,18 @@
     }
     function resume() { if (enabled && !watching) { beginWatch(); if (directionWanted && watching) addDirectionListeners(); else enableDirection(); } }
     function visibilityChanged() { if (doc.hidden) suspend(); else resume(); }
+    function pageClicked(event) {
+      if (event.isTrusted && directionState === 'permission') enableDirection();
+    }
     doc?.addEventListener?.('visibilitychange', visibilityChanged);
+    // Capture the click before map controls can stop propagation, preserving user activation.
+    doc?.addEventListener?.('click', pageClicked, true);
     env.addEventListener('pagehide', suspend);
     env.addEventListener('pageshow', resume);
     emit();
     return { start, stop, enableDirection, stopDirection, recenter() { if (positionState === 'active') options.onRecenter?.(position); }, dispose() {
       stop(); doc?.removeEventListener?.('visibilitychange', visibilityChanged);
+      doc?.removeEventListener?.('click', pageClicked, true);
       env.removeEventListener('pagehide', suspend); env.removeEventListener('pageshow', resume);
     } };
   }

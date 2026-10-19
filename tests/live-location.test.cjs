@@ -63,6 +63,53 @@ test('a startup permission requiring a gesture can be retried by locate without 
   assert.equal(f.environment.count('deviceorientation'), 1);
   assert.equal(f.calls.length, 1);
 });
+test('the first trusted page click requests direction synchronously without another GPS watch', async () => {
+  let gesture = false, requests = 0, allow;
+  const f = fixture({ permission: () => {
+    requests++;
+    return gesture ? new Promise((resolve) => { allow = resolve; }) : Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' }));
+  } });
+  f.controller.start(); await Promise.resolve();
+  f.environment.document.dispatch('click', { isTrusted: false });
+  assert.equal(requests, 1);
+  gesture = true;
+  f.environment.document.dispatch('click', { isTrusted: true });
+  assert.equal(requests, 2);
+  f.environment.document.dispatch('click', { isTrusted: true });
+  assert.equal(requests, 2);
+  allow('granted'); await Promise.resolve();
+  f.position(); f.orientation({ webkitCompassHeading: 90 });
+  assert.equal(f.state().directionState, 'active');
+  assert.equal(f.headings.at(-1), 90);
+  f.environment.document.dispatch('click', { isTrusted: true });
+  assert.equal(requests, 2);
+  assert.equal(f.calls.length, 1);
+});
+
+test('denying direction on a page click keeps GPS and later page clicks do not prompt again', async () => {
+  let requests = 0;
+  const f = fixture({ permission: () => ++requests === 1 ? Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' })) : Promise.resolve('denied') });
+  f.controller.start(); await Promise.resolve();
+  f.environment.document.dispatch('click', { isTrusted: true }); await Promise.resolve();
+  assert.equal(f.state().directionState, 'denied');
+  f.environment.document.dispatch('click', { isTrusted: true });
+  assert.equal(requests, 2);
+  f.position(); assert.equal(f.state().positionState, 'active');
+  assert.equal(f.environment.count('deviceorientation'), 0);
+});
+
+test('page clicks cannot enable direction while stopped, hidden or disposed', async () => {
+  for (const action of ['stop', 'hide', 'dispose']) {
+    let requests = 0;
+    const f = fixture({ permission: () => { requests++; return Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' })); } });
+    f.controller.start(); await Promise.resolve();
+    if (action === 'hide') f.hidden(true); else f.controller[action]();
+    f.environment.document.dispatch('click', { isTrusted: true });
+    assert.equal(requests, 1);
+    if (action === 'dispose') assert.equal(f.environment.document.count('click'), 0);
+  }
+});
+
 test('one continuous watch uses fresh high-accuracy samples and converted coordinates', () => {
   const f = fixture(); f.controller.start(); f.controller.start(); assert.equal(f.calls.length, 1);
   assert.deepEqual(f.calls[0].options, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });

@@ -119,7 +119,7 @@ function renderLiveState(state) {
   const errorLabels = { denied: '定位权限被拒绝，请在浏览器设置中允许位置访问。', timeout: '定位超时，正在等待下一次位置更新。', unavailable: '暂时无法获取位置，请检查系统定位设置。', insecure: '定位需要 HTTPS 或本机 localhost 环境。', unsupported: '当前浏览器不支持持续定位。', conversion: '地图坐标转换失败，正在等待重试。' };
   writeText('live-position-status', () => state.positionState === 'active' ? t('位置持续更新 · 精度约 ') + Math.round(state.position.accuracy) + t(' 米') + (state.position.accuracy > 100 ? t(' · 当前精度较低') : '') : t(state.positionState === 'error' ? errorLabels[state.positionError] : positionLabels[state.positionState]));
   writeText('live-accuracy', () => state.positionState === 'active' ? t('精度约 ') + Math.round(state.position.accuracy) + t(' 米') : t('精度 —'));
-  const directionLabels = { off: '方向尚未开启', permission: '点击“定位我”允许使用方向。', requesting: '正在请求方向权限…', waiting: '等待手机方向传感器…', active: '方向已开启 · 箭头随手机转动', denied: '方向权限被拒绝，位置定位仍可使用。', unavailable: '当前设备或浏览器未提供可靠方向。', posture: '请将手机平放；当前方向数据不可靠。', stale: '方向已过期，等待传感器更新…', paused: '页面在后台，方向已暂停' };
+  const directionLabels = { off: '方向尚未开启', permission: '点击页面任意位置允许使用方向。', requesting: '正在请求方向权限…', waiting: '等待手机方向传感器…', active: '方向已开启 · 箭头随手机转动', denied: '方向权限被拒绝，位置定位仍可使用。', unavailable: '当前设备或浏览器未提供可靠方向。', posture: '请将手机平放；当前方向数据不可靠。', stale: '方向已过期，等待传感器更新…', paused: '页面在后台，方向已暂停' };
   writeText('live-direction-status', () => t(directionLabels[state.directionState]));
   liveContent?.classList.toggle('is-stale', state.positionState !== 'active');
   const arrow = liveContent?.querySelector('.live-arrow');

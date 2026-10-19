@@ -41,8 +41,15 @@ function fixture(savedLanguage = null, settings = {}) {
   elements.get('end-mode').value = 'fixed'; elements.get('objective').value = 'time'; elements.get('tour-objective').value = 'time'; elements.get('current-policy').value = '0'; elements.get('policy').value = '0';
   const mode = new Element('input'); mode.value = 'driving';
   const currentRadio = new Element('input'); currentRadio.value = 'driving';
+  const documentListeners = new Map();
   const doc = {
-    documentElement: { dataset: { theme: 'light' } }, getElementById: (id) => elements.get(id), createElement: (tag) => new Element(tag), handlers: {}, addEventListener(event, fn) { this.handlers[event] = fn; },
+    documentElement: { dataset: { theme: 'light' } }, getElementById: (id) => elements.get(id), createElement: (tag) => new Element(tag), handlers: {},
+    addEventListener(event, fn, capture = false) {
+      if (!documentListeners.has(event)) documentListeners.set(event, []);
+      documentListeners.get(event).push({ fn, capture });
+      this.handlers[event] = (value) => { for (const listener of [...documentListeners.get(event)].sort((a, b) => Number(b.capture) - Number(a.capture))) listener.fn(value); };
+    },
+    removeEventListener(event, fn, capture = false) { documentListeners.set(event, (documentListeners.get(event) || []).filter((listener) => listener.fn !== fn || listener.capture !== capture)); },
     querySelector: (selector) => {
       if (selector.includes('mode')) {
         const radio = selector.includes('current-mode') ? currentRadio : mode, value = selector.match(/\[value="([^"]+)"\]/)?.[1];
@@ -1416,6 +1423,13 @@ test('location errors release the pending start and stale positions disable rece
   assert.equal(f.elements.get('locate').disabled, false); assert.match(f.elements.get('status').textContent, /定位权限被拒绝/);
   f.emitPosition(); Object.assign(f.state, { positionState: 'stale' }); f.options().onState(f.state); assert.equal(f.elements.get('live-recenter').disabled, true); assert.equal(f.circles[0].options.fillOpacity, 0.04);
 });
+test('direction permission hint explains page clicks in both languages', () => {
+  const f = liveFixture(); Object.assign(f.state, { directionState: 'permission' }); f.options().onState(f.state);
+  assert.equal(f.elements.get('live-direction-status').textContent, '点击页面任意位置允许使用方向。');
+  f.context.window.I18n.setLanguage('en');
+  assert.equal(f.elements.get('live-direction-status').textContent, 'Tap anywhere on the page to allow heading access.');
+});
+
 test('language switching preserves live location and direction while translating new controls', () => {
   const f = liveFixture(); Object.assign(f.state, { directionState: 'active', directionEnabled: true, heading: 90 }); f.emitPosition();
   f.context.window.I18n.setLanguage('en'); assert.equal(f.elements.get('live-toggle').textContent, '◎ Locate me'); assert.match(f.elements.get('live-accuracy').textContent, /Accuracy about 12/); assert.match(f.elements.get('live-direction-status').textContent, /Heading enabled/); assert.equal(f.markers.length, 1); assert.equal(f.stops(), 0);
