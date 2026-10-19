@@ -27,6 +27,7 @@
     let enabled = false, watching = false, watchId = null, generation = 0, sequence = 0;
     let position = null, positionState = 'idle', positionError = '', positionTime = 0, receivedTime = 0, convertedCoords = null;
     let directionWanted = false, directionState = 'off', directionTime = 0, heading = null;
+    let directionTouch = null;
     let permissionVersion = 0, directionStarted = 0, lastEvent = null, lastEventTime = 0;
     let tickTimer = null, conversionTimer = null, retryTimer = null;
     let converting = false, pendingPosition = null, latestSample = null, retryCount = 0;
@@ -45,6 +46,7 @@
       heading = null; lastEvent = null; lastEventTime = 0; options.onHeading?.(null);
     }
     function haltWatch() {
+      directionTouch = null;
       generation++; clearConversion();
       if (watchId !== null) geo?.clearWatch(watchId);
       watchId = null; watching = false;
@@ -220,15 +222,29 @@
     function pageClicked(event) {
       if (event.isTrusted && directionState === 'permission') enableDirection();
     }
+    function pageTouched(event) {
+      if (event.type === 'touchstart') {
+        directionTouch = event.isTrusted && directionState === 'permission' && event.touches.length === 1 ? event.touches[0] : null;
+        return;
+      }
+      const touch = (event.type === 'touchmove' ? event.touches : event.changedTouches)[0];
+      const tap = directionTouch && event.isTrusted && touch?.identifier === directionTouch.identifier && Math.hypot(touch.clientX - directionTouch.clientX, touch.clientY - directionTouch.clientY) <= 10;
+      if (event.type === 'touchmove') { if (!tap || event.touches.length !== 1) directionTouch = null; return; }
+      directionTouch = null;
+      if (event.type === 'touchend' && tap && event.touches.length === 0) pageClicked(event);
+    }
     doc?.addEventListener?.('visibilitychange', visibilityChanged);
     // Capture the click before map controls can stop propagation, preserving user activation.
     doc?.addEventListener?.('click', pageClicked, true);
+    // A map or mobile Safari can suppress click; a passive touchend preserves a real tap.
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) doc?.addEventListener?.(type, pageTouched, { capture: true, passive: true });
     env.addEventListener('pagehide', suspend);
     env.addEventListener('pageshow', resume);
     emit();
     return { start, stop, enableDirection, stopDirection, recenter() { if (positionState === 'active') options.onRecenter?.(position); }, dispose() {
       stop(); doc?.removeEventListener?.('visibilitychange', visibilityChanged);
       doc?.removeEventListener?.('click', pageClicked, true);
+      for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) doc?.removeEventListener?.(type, pageTouched, true);
       env.removeEventListener('pagehide', suspend); env.removeEventListener('pageshow', resume);
     } };
   }

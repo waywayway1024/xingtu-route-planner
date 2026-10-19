@@ -103,10 +103,53 @@ test('page clicks cannot enable direction while stopped, hidden or disposed', as
     let requests = 0;
     const f = fixture({ permission: () => { requests++; return Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' })); } });
     f.controller.start(); await Promise.resolve();
+    const finger = { identifier: 1, clientX: 20, clientY: 30 };
+    f.environment.document.dispatch('touchstart', { isTrusted: true, touches: [finger] });
     if (action === 'hide') f.hidden(true); else f.controller[action]();
     f.environment.document.dispatch('click', { isTrusted: true });
+    f.environment.document.dispatch('touchend', { isTrusted: true, touches: [], changedTouches: [finger] });
     assert.equal(requests, 1);
-    if (action === 'dispose') assert.equal(f.environment.document.count('click'), 0);
+    if (action === 'dispose') for (const type of ['click', 'touchstart', 'touchmove', 'touchend', 'touchcancel']) assert.equal(f.environment.document.count(type), 0);
+  }
+});
+
+test('a trusted single-finger page tap requests direction even without a click event', async () => {
+  let requests = 0, allow;
+  const f = fixture({ permission: () => ++requests === 1 ? Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' })) : new Promise((resolve) => { allow = resolve; }) });
+  const finger = { identifier: 1, clientX: 20, clientY: 30 };
+  f.controller.start(); await Promise.resolve();
+  f.environment.document.dispatch('touchstart', { isTrusted: true, touches: [finger] });
+  f.environment.document.dispatch('touchend', { isTrusted: true, touches: [], changedTouches: [finger] });
+  assert.equal(requests, 2);
+  f.environment.document.dispatch('click', { isTrusted: true });
+  assert.equal(requests, 2);
+  allow('granted'); await Promise.resolve();
+  f.orientation({ webkitCompassHeading: 90 });
+  assert.equal(f.state().directionState, 'active');
+  assert.equal(f.headings.at(-1), 90);
+  assert.equal(f.calls.length, 1);
+});
+
+test('scrolls, pinches, cancellations and synthetic touches do not consume the first page tap', async () => {
+  for (const action of ['move', 'pinch', 'cancel', 'synthetic']) {
+    let requests = 0;
+    const f = fixture({ permission: () => ++requests === 1 ? Promise.reject(Object.assign(new Error(), { name: 'NotAllowedError' })) : Promise.resolve('denied') });
+    const finger = { identifier: 1, clientX: 20, clientY: 30 }, second = { identifier: 2, clientX: 40, clientY: 50 };
+    const dispatch = (type, touches, changedTouches = []) => f.environment.document.dispatch(type, { isTrusted: action !== 'synthetic', touches, changedTouches });
+    f.controller.start(); await Promise.resolve();
+    dispatch('touchstart', [finger]);
+    if (action === 'move') dispatch('touchmove', [{ ...finger, clientX: 80 }]);
+    if (action === 'pinch') { dispatch('touchstart', [finger, second]); dispatch('touchend', [finger], [second]); }
+    if (action === 'cancel') dispatch('touchcancel', [], [finger]);
+    dispatch('touchend', [], [finger]);
+    assert.equal(requests, 1, action);
+    f.environment.document.dispatch('touchstart', { isTrusted: true, touches: [finger] });
+    f.environment.document.dispatch('touchend', { isTrusted: true, touches: [], changedTouches: [finger] });
+    assert.equal(requests, 2, action);
+    await Promise.resolve();
+    f.environment.document.dispatch('touchstart', { isTrusted: true, touches: [finger] });
+    f.environment.document.dispatch('touchend', { isTrusted: true, touches: [], changedTouches: [finger] });
+    assert.equal(requests, 2, 'denial must not prompt on later taps');
   }
 });
 
