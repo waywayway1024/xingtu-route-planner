@@ -27,7 +27,7 @@
     let cities, view, city = '', start = null, end = null, station = null;
     let ready = false, loading = false, manualCity = false, waitingPosition = false, locating = false;
     let opening = 0, geocodeVersion = 0, loadTimer, routeTimer, pendingRoute = null;
-    let statusText = '定位城市后查看地铁线路。', statusError = false, result = null, routeData = null, restoringRoute = false, storageError = false;
+    let statusText = '定位城市后查看地铁线路。', statusError = false, result = null, routeData = null, storageError = false;
     function stationId(value) { return typeof value === 'string' ? value : value?.id; }
     function savedStation(value) {
       if (typeof value === 'string') return value;
@@ -85,6 +85,7 @@
       }
     }
     function clearResult() {
+      pendingRoute?.abort();
       clearTimeout(routeTimer); pendingRoute = null; result = null; routeData = null;
       view?.clearRoute(); $('metro-search-results').hidden = true;
     }
@@ -99,12 +100,12 @@
     function restoreRoute() {
       if (!routeData || !ready || !stationInfo(stationId(start)) || !stationInfo(stationId(end)) || typeof view.routeWithData !== 'function') return false;
       // Redraw the saved response; querying again could replace the user's itinerary.
-      restoringRoute = true;
       try { view.routeWithData({ start: stationId(start), end: stationId(end), routedata: routeData, closeBtn: false }); return true; }
       catch { return false; }
-      finally { restoringRoute = false; }
     }
-    function routeFailed() {
+    function routeFailed(request) {
+      if (request !== pendingRoute) return;
+      request.abort();
       clearTimeout(routeTimer); pendingRoute = null; restoreRoute();
       status('未找到可用地铁路线，请调整站点后重试。', true);
     }
@@ -127,6 +128,7 @@
       station = null; save(); status(start && end ? '起终点已选择，可以规划地铁路线。' : '请继续选择另一个地铁站。');
     }
     function loaded() {
+      if (!city) return;
       const drawnCity = $('metro-frame').contentDocument?.getElementById('subway-svg')?.getAttribute('adcode');
       if (drawnCity && drawnCity !== city) return;
       clearTimeout(loadTimer); loading = false; ready = true;
@@ -166,15 +168,6 @@
         view.event.on('subway.complete', loaded);
         view.event.on('error.complete', () => { clearTimeout(loadTimer); loading = false; ready = false; status('地铁图加载失败，请检查网络后重试。', true); });
         for (const event of ['station.touch', 'stationName.touch']) view.event.on(event, (event, info) => selectStation(info?.id));
-        view.event.on('subway.routeComplete', (event, info) => {
-          if (restoringRoute) return;
-          const route = info?.data?.buslist?.[0];
-          if (!pendingRoute || !route || route.spoi?.id !== pendingRoute.start || route.epoi?.id !== pendingRoute.end) { view.clearRoute(); restoreRoute(); return; }
-          clearTimeout(routeTimer); pendingRoute = null;
-          if (String(info.status) !== '1' || !routeInfo(info.data)) { view.clearRoute(); routeFailed(); return; }
-          start = stationInfo(stationId(start)) || start; end = stationInfo(stationId(end)) || end;
-          routeData = { ...info.data, count: '1' }; result = route; station = null; save(); status('地铁路线已规划，请查看线路和换乘站。');
-        });
       }
     }
     async function identify(position = options.getPosition()) {
@@ -196,7 +189,12 @@
         if (version !== geocodeVersion || !dialog.open || manualCity) return;
         const code = cityForAddress(cities, address);
         if (code) showCity(code);
-        else { clearResult(); ready = false; $('metro-city').value = ''; $('metro-map').hidden = true; status('定位城市暂无高德地铁数据，请选择其他城市。', true); }
+        else {
+          clearResult(); clearTimeout(loadTimer); view?.clearOverlays();
+          city = ''; start = null; end = null; station = null; ready = false; loading = false;
+          $('metro-city').value = ''; $('metro-map').hidden = true; save();
+          status('定位城市暂无高德地铁数据，请选择其他城市。', true);
+        }
       } catch (error) { if (version === geocodeVersion && dialog.open) status(error.message, true); }
       finally { if (version === geocodeVersion) locating = false; }
     }
@@ -251,14 +249,26 @@
     });
     $('metro-set-start').onclick = () => setEndpoint('start'); $('metro-set-end').onclick = () => setEndpoint('end');
     $('metro-swap').onclick = () => { if (!ready || pendingRoute) return; clearResult(); view.clearOverlays(); [start, end] = [end, start]; if (start) view.setStart(start.id); if (end) view.setEnd(end.id); save(); render(); };
-    $('metro-plan').onclick = () => {
+    $('metro-plan').onclick = async () => {
       if (!ready || pendingRoute) return;
       const mapStart = stationInfo(stationId(start)), mapEnd = stationInfo(stationId(end));
       if (!mapStart || !mapEnd) return;
-      view.clearRoute(); pendingRoute = { start: mapStart.poiid, end: mapEnd.poiid }; station = null;
+      view.clearRoute(); const request = pendingRoute = new AbortController(); station = null;
       status('正在计算地铁路线…');
-      routeTimer = setTimeout(routeFailed, 15000);
-      view.route(start.id, end.id, { closeBtn: false });
+      routeTimer = setTimeout(() => routeFailed(request), 15000);
+      try {
+        const [x1, y1] = mapStart.lnglat.split(','), [x2, y2] = mapEnd.lnglat.split(',');
+        const params = new URLSearchParams({ x1, y1, x2, y2, poiid1: mapStart.poiid, poiid2: mapEnd.poiid, uuid: root.crypto.randomUUID(), type: '6', Ver: '3' });
+        // Use the SDK's route service with a per-request signal; its shared event has no request ID.
+        const response = await fetch('https://webapi.amap.com/subway/service/navigation/busExt?' + params, { signal: request.signal });
+        if (!response.ok) throw new Error('route request failed');
+        const data = await response.json();
+        if (pendingRoute !== request) return;
+        const route = routeInfo(data);
+        if (String(data?.count) !== '1' || route?.spoi?.id !== mapStart.poiid || route?.epoi?.id !== mapEnd.poiid) throw new Error('invalid route');
+        clearTimeout(routeTimer); pendingRoute = null; start = mapStart; end = mapEnd;
+        routeData = { ...data, count: '1' }; result = route; restoreRoute(); save(); status('地铁路线已规划，请查看线路和换乘站。');
+      } catch { routeFailed(request); }
     };
     for (const [id, step] of [['metro-zoom-in', .15], ['metro-zoom-out', -.15]]) $(id).onclick = () => {
       if (!ready) return;

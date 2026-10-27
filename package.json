@@ -1,6 +1,6 @@
 {
   "name": "manmanhang",
-  "version": "1.5.11",
+  "version": "1.5.12",
   "private": true,
   "description": "基于高德地图 JS API 的国内路线规划网页",
   "scripts": {
@@ -8,6 +8,6 @@
     "build": "node build-site.cjs",
     "check": "node --check app.js && node --check live-location.js && node --check server.cjs && node --check config.js && node --check route-optimizer.js && node --check worker.mjs && node --check i18n.js && node --check pwa.js && node --check public-assets.cjs && node --check metro.js",
     "pretest": "node build-site.cjs",
-    "test": "node --test tests/optimizer.test.cjs tests/planning-ui.test.cjs tests/worker.test.mjs tests/live-location.test.cjs tests/pwa.test.cjs tests/launch.test.cjs tests/metro.test.cjs"
+    "test": "node --test tests/optimizer.test.cjs tests/planning-ui.test.cjs tests/worker.test.mjs tests/live-location.test.cjs tests/pwa.test.cjs tests/launch.test.cjs tests/metro.test.cjs tests/server.test.cjs"
   }
 }

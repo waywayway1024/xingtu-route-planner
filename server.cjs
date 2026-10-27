@@ -7,7 +7,9 @@ const files = Object.fromEntries(Object.entries(publicFiles).map(([name, type]) 
 files['/'] = files['/index.html'];
 files['/app-version.json'] = ['app-version.json', 'application/json'];
 const server = http.createServer((req, res) => {
-  const pathname = new URL(req.url, 'http://localhost').pathname;
+  let pathname;
+  try { pathname = new URL(req.url, 'http://localhost').pathname; }
+  catch { res.writeHead(400); res.end('Invalid request URL'); return; }
   const entry = files[pathname];
   if (!entry) { res.writeHead(404); res.end('Not found'); return; }
   if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }

@@ -485,7 +485,7 @@ test('unique exact places automatically choose both endpoints and produce a full
   for (let i = 0; i < 3; i++) {
     assert.equal(f.placePending.length, 1);
     const { keyword, callback } = f.placePending.shift();
-    callback('complete', { poiList: { count: 12, pois: [{ name: keyword, address: '地址' + i, location: String(i) }, {name: keyword + '-东门', location: '门' + i}] } });
+    callback('complete', { poiList: { count: 2, pois: [{ name: keyword, address: '地址' + i, location: String(i) }, {name: keyword + '-东门', location: '门' + i}] } });
     await new Promise((resolve) => setTimeout(resolve, 270));
   }
   const matrix = [[0, 50, 1], [1, 0, 50], [50, 50, 0]];
@@ -502,6 +502,24 @@ test('unique exact places automatically choose both endpoints and produce a full
   f.elements.get('language-toggle').onclick();
   assert.match(f.elements.get('order-list').children[0].textContent, /Start · 乙/);
   assert.match(f.elements.get('start').parent.children[0].lastChild.textContent, /start chosen automatically/);
+});
+
+test('incomplete or unknown result counts require confirmation even with one exact name', async () => {
+  for (const count of [20, undefined]) {
+    const f = fixture(); f.run('loadedConfig = true; map = {}'); f.elements.get('tour-places').value = '公园\n车站';
+    const task = f.elements.get('plan-tour').onclick();
+    f.placePending.shift().callback('complete', { poiList: { count, pois: [{ name: '公园', location: '0' }] } });
+    await new Promise(resolve => setTimeout(resolve, 270));
+    f.placePending.shift().callback('complete', { poiList: { count: 1, pois: [{ name: '车站', location: '1' }] } });
+    await new Promise(resolve => setImmediate(resolve));
+    if (f.run('selected.start')) f.elements.get('cancel-plan').onclick();
+    await task;
+    assert.equal(f.run('selected.start'), null);
+    assert.equal(f.run('selected.end.name'), '车站');
+    assert.equal(f.pending.length, 0);
+    assert.equal(f.elements.get('start-options').children[0].textContent, '公园');
+    assert.equal(f.elements.get('address-details').open, true);
+  }
 });
 
 test('ambiguity needs a choice and resuming keeps already confirmed places', async () => {
@@ -619,13 +637,13 @@ function walkingTourFixture(endMode = 'auto') {
   return f;
 }
 
-async function settleWalkingTour(f, task) {
+async function settleWalkingTour(f, task, extraTime = 0) {
   const matrix = [[0, 50, 1], [1, 0, 50], [50, 50, 0]];
   while (f.run('busy')) {
     assert.equal(f.pending.length, 1);
     const { args } = f.searches.at(-1);
     const from = Math.round((args[0][0] - 116) * 100), to = Math.round((args[1][0] - 116) * 100);
-    const time = matrix[from][to], distance = 1000 - time * 5;
+    const time = matrix[from][to] + extraTime, distance = 1000 - time * 5;
     f.pending.shift()('complete', { routes: [
       { time: time + 100, distance: 1, steps: [{ instruction: '较慢路线', path: [args[0], args[1]] }] },
       { time, distance, steps: [{ instruction: from + '走到' + to, path: [args[0], args[1]] }] }
@@ -662,6 +680,8 @@ for (const [endMode, expected] of [['fixed', ['甲', '乙', '丙']], ['free', ['
     const task = f.elements.get('route-form').onsubmit(event);
     await settleWalkingTour(f, task);
     assert.ok(f.searches.every(search => search.type === 'walking' && search.args.length === 2 && !search.options?.map));
+    assert.equal(f.searches.length, { fixed: 2, free: 4, auto: 6 }[endMode]);
+    assert.equal(new Set(f.searches.map(search => search.args.join('>'))).size, f.searches.length);
     assert.deepEqual(Array.from(f.run('lastRoute.points.map(point => point.name)')), expected);
     assert.equal(f.run('lastRoute.objective'), 'walking-time');
     assert.equal(paths.length, 2); assert.deepEqual(markers, expected); assert.equal(fitViews.length, 1);
@@ -697,13 +717,51 @@ test('unreachable walking tours report a walking error without falling back to d
   assert.equal(f.elements.get('summary').hidden, true);
 });
 
-test('cancelling final walking legs rejects late results and releases planning controls', async () => {
+test('a new walking plan refreshes costs rather than reusing an earlier plan', async () => {
+  const f = walkingTourFixture();
+  await settleWalkingTour(f, f.elements.get('route-form').onsubmit(event));
+  assert.equal(f.run('lastRoute.route.time'), 2);
+  await settleWalkingTour(f, f.elements.get('route-form').onsubmit(event), 10);
+  assert.equal(f.searches.length, 12);
+  assert.equal(f.run('lastRoute.route.time'), 22);
+});
+
+test('walking reuse skips a zero-length leg while retaining every stop', async () => {
+  const f = walkingTourFixture('fixed');
+  f.run("selected['stop-1'].location = selected.start.location");
+  const task = f.elements.get('route-form').onsubmit(event);
+  await settleWalkingTour(f, task);
+  assert.equal(f.searches.length, 1);
+  assert.equal(f.run('lastRoute.points.length'), 3);
+  assert.equal(f.run('lastRoute.paths.length'), 1);
+  assert.equal(f.run('lastRoute.instructions.length'), 1);
+  assert.equal(f.run('lastRoute.route.time'), f.run('lastRoute.optimized.cost'));
+});
+
+test('eight-place walking optimization queries each directed pair once and draws all seven legs', async () => {
+  const f = fixture(); f.elements.get('batch-addresses').value = '甲\n乙\n丙\n丁\n戊\n己\n庚\n辛'; f.elements.get('batch-form').onsubmit(event);
+  f.elements.get('end-mode').value = 'auto'; f.elements.get('tour-objective').value = 'walking-time'; f.elements.get('tour-objective').onchange();
+  f.context.setTimeout = (fn, delay) => setTimeout(fn, delay === 250 ? 0 : delay);
+  f.run("loadedConfig = true; map = {}; addressIds().forEach((id, i) => selected[id] = {name: $(id).value, location: [116 + i / 100, 39]})");
+  const task = f.elements.get('route-form').onsubmit(event);
+  while (f.run('busy')) {
+    if (f.pending.length) {
+      const { args } = f.searches.at(-1);
+      f.pending.shift()('complete', { routes: [{ time: 60, distance: 100, steps: [{ instruction: '前行', path: args.slice(0, 2) }] }] });
+    }
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  await task;
+  assert.equal(f.searches.length, 56);
+  assert.equal(new Set(f.searches.map(search => search.args.join('>'))).size, 56);
+  assert.equal(f.run('lastRoute.paths.length'), 7);
+  assert.equal(f.run('lastRoute.instructions.length'), 7);
+  assert.equal(f.run('lastRoute.route.time'), 420);
+});
+
+test('cancelling walking comparison rejects late results and releases planning controls', async () => {
   const f = walkingTourFixture('fixed');
   const task = f.elements.get('route-form').onsubmit(event);
-  for (let i = 0; i < 2; i++) {
-    f.pending.shift()('complete', { routes: [{ time: 60, distance: 100 }] });
-    await new Promise(resolve => setTimeout(resolve, 270));
-  }
   const late = f.pending.shift();
   f.elements.get('cancel-plan').onclick();
   late('complete', { routes: [{ time: 60, distance: 100 }] });

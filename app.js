@@ -596,11 +596,11 @@ $('plan-tour').onclick = async () => {
       ensureCurrent(request);
       status(() => t('正在识别游玩地点 ') + (i + 1) + '/' + ids.length + '…');
       progress(() => t('正在识别游玩地点 ') + (i + 1) + '/' + ids.length, i / ids.length * 100);
-      const { places } = await queryTourPlaces(names[i]);
+      const { places, count } = await queryTourPlaces(names[i]);
       ensureCurrent(request);
-      // A named park and its gates are different matches. Equal names need a choice.
+      // Only a complete candidate list can establish that an exact name is unique.
       const exact = places.filter((place) => place.name === names[i]);
-      if (exact.length === 1) {
+      if (exact.length === 1 && Number.isInteger(count) && count === places.length) {
         selected[ids[i]] = exact[0]; $(ids[i]).value = exact[0].name; versions[ids[i]]++;
       } else unresolved.push({ id: ids[i], places });
       updateAddressState();
@@ -697,6 +697,7 @@ function sameLocation(a, b) { return String(a) === String(b); }
 async function buildMatrix(points, policy, objective, request, travelMode) {
   const n = points.length;
   const matrix = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 0 : Infinity));
+  const walkingLegs = travelMode === 'walking' ? Array.from({ length: n }, () => Array(n).fill(null)) : null;
   const fixed = $('end-mode').value === 'fixed';
   const auto = $('end-mode').value === 'auto';
   const pairs = [];
@@ -712,24 +713,27 @@ async function buildMatrix(points, policy, objective, request, travelMode) {
     if (sameLocation(points[i].location, points[j].location)) { matrix[i][j] = 0; continue; }
     const data = await queryRoute(travelMode === 'walking' ? new AMap.Walking() : new AMap.Driving({ policy }), points[i].location, points[j].location);
     ensureCurrent(request);
-    const values = (data?.routes || []).map((route) => Number(route[objective === 'distance' ? 'distance' : 'time'])).filter((value) => Number.isFinite(value) && value >= 0);
-    if (values.length) matrix[i][j] = Math.min(...values);
+    const cost = objective === 'distance' ? 'distance' : 'time';
+    if (walkingLegs) {
+      const leg = (data?.routes || []).filter(route => Number.isFinite(route.time) && route.time >= 0 && Number.isFinite(route.distance) && route.distance >= 0).sort((a, b) => a[cost] - b[cost])[0];
+      if (leg) { matrix[i][j] = leg[cost]; walkingLegs[i][j] = leg; }
+    } else {
+      const values = (data?.routes || []).map(route => Number(route[cost])).filter(value => Number.isFinite(value) && value >= 0);
+      if (values.length) matrix[i][j] = Math.min(...values);
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  return matrix;
+  return { matrix, walkingLegs };
 }
-async function queryWalkingTour(service, points, request) {
+function walkingTour(points, order, legs, request) {
   const route = { time: 0, distance: 0, steps: [] };
-  // Walking.search accepts two coordinates, so query each optimized leg separately.
+  // Reuse this plan's selected directed legs, including their geometry and instructions.
   for (let i = 1; i < points.length; i++) {
     ensureCurrent(request);
     if (sameLocation(points[i - 1].location, points[i].location)) continue;
-    const result = await queryRoute(service, points[i - 1].location, points[i].location);
-    ensureCurrent(request);
-    const leg = (result?.routes || []).filter(item => Number.isFinite(item.time) && item.time >= 0 && Number.isFinite(item.distance) && item.distance >= 0).sort((a, b) => a.time - b.time)[0];
+    const leg = legs[order[i - 1]][order[i]];
     if (!leg) throw new Error('未找到可用路线，请调整地点或出行方式。');
     route.time += leg.time; route.distance += leg.distance; route.steps.push(...(leg.steps || []));
-    if (i < points.length - 1) await new Promise(resolve => setTimeout(resolve, 250));
   }
   return { routes: [route] };
 }
@@ -761,9 +765,10 @@ async function planRoute(event, fromCurrent = false) {
     const multi = !fromCurrent && (stops.length > 0 || auto);
     const objective = $('objective').value;
     const policy = multi ? (objective === 'distance' ? 2 : 0) : Number($(fromCurrent ? 'current-policy' : 'policy').value);
-    let optimized, baseline;
+    let optimized, baseline, walkingLegs;
     if (multi) {
-      const matrix = await buildMatrix(points, policy, objective, request, travelMode);
+      const comparison = await buildMatrix(points, policy, objective, request, travelMode);
+      const matrix = comparison.matrix; walkingLegs = comparison.walkingLegs;
       ensureCurrent(request);
       optimized = auto ? window.RouteOptimizer.optimizeTourRoute(matrix) : window.RouteOptimizer.optimizeRoute(matrix, $('end-mode').value === 'fixed');
       if (!optimized) throw new Error(travelMode === 'walking' ? '这些地址无法组成全部可达的步行路线，请调整地址。' : '这些地址无法组成全部可达的驾车路线，请调整地址。');
@@ -773,9 +778,9 @@ async function planRoute(event, fromCurrent = false) {
       progress(() => t('正在生成完整路线…'), 95);
     }
     if (travelMode === 'driving') planner = new AMap.Driving({ ...options, policy });
-    if (travelMode === 'walking') planner = new AMap.Walking(multi ? {} : options);
+    if (travelMode === 'walking') planner = multi ? null : new AMap.Walking(options);
     activePlanner = planner;
-    const result = travelMode === 'walking' && multi ? await queryWalkingTour(activePlanner, points, request) : await queryRoute(activePlanner, points[0].location, points.at(-1).location, points.length > 2 ? points.slice(1, -1).map((point) => point.location) : null);
+    const result = travelMode === 'walking' && multi ? walkingTour(points, optimized.order, walkingLegs, request) : await queryRoute(activePlanner, points[0].location, points.at(-1).location, points.length > 2 ? points.slice(1, -1).map((point) => point.location) : null);
     ensureCurrent(request);
     const routes = result?.routes || result?.plans;
     if (!routes?.length) throw new Error('未找到可用路线，请调整地点或出行方式。');
